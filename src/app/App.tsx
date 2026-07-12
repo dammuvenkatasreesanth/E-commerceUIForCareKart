@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
-import carekartLogo from "@/imports/_Linked_File_.png";
+import { Logo } from "./components/Logo";
 import img0618 from "@/imports/Document/0618c73c0fd5ca9c0a3cc2e20eb36fb8ebe5ff4e.png";
 import img5f3d from "@/imports/Document/5f3d77342e755ac73a0887cb0cb4c3de54018121.png";
 import img85e2 from "@/imports/Document/85e2fd11b1e1ec375e5b2b5d6212f268e89a2025.png";
@@ -185,7 +185,7 @@ function Header({ cartCount, setPage, isLoggedIn, page }: { cartCount: number; s
       </div>
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
         <button onClick={() => setPage("home")} className="flex items-center flex-shrink-0">
-          <img src={carekartLogo} alt="CareKart Gloves" className="h-8 w-auto object-contain" />
+          <Logo className="h-8" />
         </button>
         <div className="flex-1 mx-3 hidden md:block">
           <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input placeholder="Search gloves, masks, PPE kits…" className="w-full pl-9 pr-4 py-2.5 text-sm bg-muted rounded-xl border border-transparent focus:border-primary/30 focus:outline-none" /></div>
@@ -519,7 +519,7 @@ function HomePage({ products, setPage, setDetailId, addToCart, banners }: {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
           <div className="col-span-2 md:col-span-1">
             <div className="mb-3">
-              <img src={carekartLogo} alt="CareKart Gloves" className="h-7 w-auto object-contain" />
+              <Logo className="h-7" />
             </div>
             <p className="text-xs text-muted-foreground mb-4 leading-relaxed">India's trusted B2B PPE marketplace. Factory-direct pricing for hospitals, clinics &amp; retailers.</p>
             <div className="flex items-center gap-3 mb-4">
@@ -983,7 +983,7 @@ function AdminPanel({ products, setProducts, users, banners, setBanners, setPage
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-border flex-shrink-0 hidden md:flex flex-col sticky top-0 h-screen">
         <div className="p-4 border-b border-border flex flex-col gap-1">
-          <img src={carekartLogo} alt="CareKart Gloves" className="h-6 w-auto object-contain object-left" />
+          <Logo className="h-6" />
           <span className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase">Admin Panel</span>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
