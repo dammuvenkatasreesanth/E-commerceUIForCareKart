@@ -14,6 +14,7 @@ import {
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { Logo } from "./components/Logo";
+import carekartLogo from "@/imports/_Linked_File_.png";
 import img0618 from "@/imports/Document/0618c73c0fd5ca9c0a3cc2e20eb36fb8ebe5ff4e.png";
 import img5f3d from "@/imports/Document/5f3d77342e755ac73a0887cb0cb4c3de54018121.png";
 import img85e2 from "@/imports/Document/85e2fd11b1e1ec375e5b2b5d6212f268e89a2025.png";
@@ -177,7 +178,7 @@ function MobileBottomNav({ page, setPage, cartCount, isLoggedIn }: { page: Page;
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────────
-function Header({ cartCount, setPage, isLoggedIn, page }: { cartCount: number; setPage: (p: Page) => void; isLoggedIn: boolean; page: Page }) {
+function Header({ cartCount, setPage, isLoggedIn, page, currentUser }: { cartCount: number; setPage: (p: Page) => void; isLoggedIn: boolean; page: Page; currentUser: AppUser | null }) {
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-border shadow-sm">
       <div className="bg-primary text-white text-center py-1.5 text-xs font-medium hidden sm:block">
@@ -190,7 +191,18 @@ function Header({ cartCount, setPage, isLoggedIn, page }: { cartCount: number; s
         <div className="flex-1 mx-3 hidden md:block">
           <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input placeholder="Search gloves, masks, PPE kits…" className="w-full pl-9 pr-4 py-2.5 text-sm bg-muted rounded-xl border border-transparent focus:border-primary/30 focus:outline-none" /></div>
         </div>
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-1 ml-auto">
+          {/* Mobile: cart + profile icons */}
+          <button onClick={() => setPage("cart")} className="relative p-2 hover:bg-muted rounded-xl flex md:hidden">
+            <ShoppingCart className="w-5 h-5" />
+            {cartCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>}
+          </button>
+          <button onClick={() => setPage(isLoggedIn ? "account" : "login")} className="flex md:hidden items-center justify-center p-2 hover:bg-muted rounded-xl">
+            {isLoggedIn
+              ? <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center text-white text-xs font-extrabold">{currentUser?.name[0]?.toUpperCase() ?? "U"}</div>
+              : <User className="w-5 h-5" />}
+          </button>
+          {/* Desktop: cart + account button + admin */}
           <button onClick={() => setPage("cart")} className="relative p-2 hover:bg-muted rounded-xl hidden md:flex"><ShoppingCart className="w-5 h-5" />{cartCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>}</button>
           <button onClick={() => setPage(isLoggedIn ? "account" : "login")} className="hidden md:flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"><User className="w-4 h-4" />{isLoggedIn ? "Account" : "Login"}</button>
           <button onClick={() => setPage("admin")} className="hidden md:flex items-center gap-1.5 px-3 py-2 bg-muted text-foreground text-sm font-semibold rounded-xl hover:bg-border transition-colors"><LayoutDashboard className="w-4 h-4" /></button>
@@ -270,57 +282,183 @@ function LoginPage({ onLogin, setPage, existingUsers, addUser }: {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 pb-20 md:pb-0">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-6">
-          <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4"><Shield className="w-8 h-8 text-white" /></div>
-          <h1 className="text-2xl font-extrabold font-['Plus_Jakarta_Sans'] mb-1">Welcome to CareKart</h1>
-          <p className="text-sm text-muted-foreground">India's trusted PPE marketplace</p>
-        </div>
-        <div className="bg-white border border-border rounded-2xl p-6 shadow-sm">
-          {step === "phone" && <>
-            <h2 className="font-bold text-lg mb-1">Login / Sign Up</h2>
-            <p className="text-sm text-muted-foreground mb-4">Enter your mobile number to continue</p>
-            <div className="flex gap-2 mb-4">
-              <div className="flex items-center gap-1 px-3 py-2.5 bg-muted rounded-xl border border-border text-sm font-semibold text-muted-foreground flex-shrink-0"><span>🇮🇳</span><span>+91</span></div>
-              <input type="tel" maxLength={10} value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ""))} onKeyDown={e => e.key === "Enter" && sendOtp()} placeholder="98765 43210" className="flex-1 px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
-            </div>
-            <button onClick={sendOtp} disabled={phone.length !== 10} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed">Send OTP</button>
-          </>}
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* ── LEFT PANEL: image + branding (desktop only) ── */}
+      <div className="hidden md:flex md:w-1/2 relative flex-col overflow-hidden">
+        {/* Background image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1666887360934-2cffb560ed66?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxtZWRpY2FsJTIwZ2xvdmVzJTIwaGVhbHRoY2FyZSUyMHByb2Zlc3Npb25hbCUyMFBQRXxlbnwxfHx8fDE3ODM5MDUzMjF8MA&ixlib=rb-4.1.0&q=80&w=1080')` }}
+        />
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0f2d7a]/90 via-[#1741B0]/75 to-[#0D9488]/60" />
 
-          {step === "otp" && <>
-            <button onClick={() => setStep("phone")} className="flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground"><ArrowLeft className="w-4 h-4" /> Change number</button>
-            <h2 className="font-bold text-lg mb-1">Verify OTP</h2>
-            <p className="text-sm text-muted-foreground mb-4">Sent to <span className="font-semibold text-foreground">+91 {phone}</span></p>
-            <div className="flex gap-2 justify-between mb-4">
-              {otp.map((d, i) => <input key={i} ref={el => { otpRefs.current[i] = el; }} type="tel" maxLength={1} value={d} onChange={e => handleOtpChange(i, e.target.value)} onKeyDown={e => handleOtpKey(i, e)} className="w-11 h-12 text-center text-lg font-bold bg-muted rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors" />)}
-            </div>
-            <button onClick={verifyOtp} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90">Verify & Continue</button>
-            <div className="text-center mt-3">{timer > 0 ? <p className="text-xs text-muted-foreground">Resend in <span className="font-bold">{timer}s</span></p> : <button onClick={() => { setOtp(["","","","","",""]); setTimer(30); }} className="text-xs text-primary font-semibold">Resend OTP</button>}</div>
-          </>}
+        {/* Content */}
+        <div className="relative z-10 flex flex-col h-full p-10">
+          {/* Logo */}
+          <div>
+            <img src={carekartLogo} alt="CareKart Gloves" className="h-9 w-auto object-contain object-left brightness-0 invert" />
+          </div>
 
-          {step === "register" && <>
-            <h2 className="font-bold text-lg mb-1">Complete Your Profile</h2>
-            <p className="text-sm text-muted-foreground mb-4">Tell us a bit about yourself</p>
-            <div className="space-y-3 mb-4">
-              <div><label className="block text-xs font-semibold mb-1">Full Name <span className="text-destructive">*</span></label><input value={name} onChange={e => setName(e.target.value)} placeholder="Your full name" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" /></div>
-              <div><label className="block text-xs font-semibold mb-1">Email (optional)</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" /></div>
-              <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${isRetailer ? "border-primary bg-primary/5" : "border-border"}`}>
-                <input type="checkbox" checked={isRetailer} onChange={e => setIsRetailer(e.target.checked)} className="w-4 h-4 accent-primary" />
-                <div><p className="font-semibold text-sm">I'm purchasing for a registered business</p><p className="text-xs text-muted-foreground">Get GST invoices &amp; B2B bulk pricing</p></div>
-              </label>
-              {isRetailer && <div>
-                <label className="block text-xs font-semibold mb-1">GSTIN</label>
-                <input value={gstin} onChange={e => { setGstin(e.target.value.toUpperCase()); setGstinError(""); }} placeholder="27AABCC1234M1Z5" maxLength={15} className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm font-mono" />
-                {gstinError && <p className="text-xs text-destructive mt-1">{gstinError}</p>}
-                <p className="text-[10px] text-muted-foreground mt-1">15-character GST identification number. Leave blank if unavailable.</p>
-              </div>}
+          {/* Middle tagline */}
+          <div className="flex-1 flex flex-col justify-center">
+            <p className="text-white/60 text-xs font-semibold tracking-[0.2em] uppercase mb-3">India's #1 B2B PPE Marketplace</p>
+            <h2 className="text-3xl xl:text-4xl font-extrabold text-white font-['Plus_Jakarta_Sans'] leading-tight mb-4">
+              Trusted by 50,000+<br />Healthcare Professionals
+            </h2>
+            <p className="text-white/70 text-sm leading-relaxed max-w-xs">
+              Factory-direct nitrile gloves, N95 masks, and PPE kits. Bulk discounts, same-day dispatch, and GST-compliant invoicing.
+            </p>
+
+            {/* Stats row */}
+            <div className="flex gap-6 mt-8">
+              {[{ val: "₹2Cr+", label: "Monthly GMV" }, { val: "2-Day", label: "Avg Delivery" }, { val: "ISO", label: "Certified" }].map(s => (
+                <div key={s.label}>
+                  <p className="text-white font-extrabold text-lg">{s.val}</p>
+                  <p className="text-white/60 text-xs font-medium">{s.label}</p>
+                </div>
+              ))}
             </div>
-            <button onClick={handleRegister} disabled={!name.trim()} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40">Create Account &amp; Continue</button>
-          </>}
+          </div>
+
+          {/* Trust badges bottom */}
+          <div className="flex flex-wrap gap-2">
+            {["ISO 13485", "CE Marked", "FDA Listed", "BIS Certified"].map(b => (
+              <span key={b} className="px-3 py-1 bg-white/15 border border-white/20 rounded-full text-white/90 text-[11px] font-semibold backdrop-blur-sm">{b}</span>
+            ))}
+          </div>
         </div>
-        <div className="flex justify-center gap-8 mt-5">
-          {[{ icon: ShieldCheck, label: "ISO Certified" }, { icon: Truck, label: "Pan-India" }, { icon: Award, label: "FSSAI" }].map(t => <div key={t.label} className="flex flex-col items-center gap-1"><t.icon className="w-5 h-5 text-primary" /><span className="text-[10px] text-muted-foreground font-medium">{t.label}</span></div>)}
+      </div>
+
+      {/* ── RIGHT PANEL: form ── */}
+      <div className="flex-1 md:w-1/2 flex flex-col min-h-screen md:min-h-0 bg-white">
+        {/* Mobile header */}
+        <div className="md:hidden flex items-center justify-between px-5 py-4 border-b border-border">
+          <img src={carekartLogo} alt="CareKart Gloves" className="h-7 w-auto object-contain" />
+          <button onClick={() => setPage("home")} className="text-xs text-muted-foreground font-semibold flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" />Back to store</button>
+        </div>
+
+        {/* Scrollable form area */}
+        <div className="flex-1 flex flex-col justify-center px-6 md:px-10 xl:px-16 py-8 overflow-y-auto">
+          {/* Desktop logo + back link */}
+          <div className="hidden md:flex items-center justify-between mb-10">
+            <div />
+            <button onClick={() => setPage("home")} className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5 hover:text-foreground transition-colors"><ArrowLeft className="w-3.5 h-3.5" />Back to store</button>
+          </div>
+
+          <div className="w-full max-w-sm mx-auto">
+            {/* Step indicator */}
+            <div className="flex items-center gap-1.5 mb-6">
+              {(["phone", "otp", "register"] as const).map((s, i) => (
+                <div key={s} className="flex items-center gap-1.5">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all ${step === s ? "bg-primary text-white" : i < ["phone", "otp", "register"].indexOf(step) ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"}`}>
+                    {i < ["phone", "otp", "register"].indexOf(step) ? <Check className="w-3 h-3" /> : i + 1}
+                  </div>
+                  {i < 2 && <div className={`h-px w-6 transition-all ${i < ["phone", "otp", "register"].indexOf(step) ? "bg-emerald-500" : "bg-border"}`} />}
+                </div>
+              ))}
+              <span className="ml-1 text-xs text-muted-foreground font-medium capitalize">{step === "phone" ? "Phone" : step === "otp" ? "Verify" : "Profile"}</span>
+            </div>
+
+            {/* Phone step */}
+            {step === "phone" && (
+              <div>
+                <h1 className="text-2xl font-extrabold font-['Plus_Jakarta_Sans'] mb-1">Welcome back</h1>
+                <p className="text-sm text-muted-foreground mb-6">Enter your mobile number to login or sign up</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5">Mobile Number</label>
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1.5 px-3 py-2.5 bg-muted rounded-xl border border-border text-sm font-semibold text-muted-foreground flex-shrink-0">
+                        <span>🇮🇳</span><span>+91</span>
+                      </div>
+                      <input type="tel" maxLength={10} value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ""))} onKeyDown={e => e.key === "Enter" && sendOtp()} placeholder="98765 43210" className="flex-1 px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" autoFocus />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1.5">We'll send a 6-digit OTP to verify your number</p>
+                  </div>
+                  <button onClick={sendOtp} disabled={phone.length !== 10} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    Send OTP
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* OTP step */}
+            {step === "otp" && (
+              <div>
+                <button onClick={() => setStep("phone")} className="flex items-center gap-1 text-sm text-muted-foreground mb-5 hover:text-foreground transition-colors"><ArrowLeft className="w-4 h-4" />Change number</button>
+                <h1 className="text-2xl font-extrabold font-['Plus_Jakarta_Sans'] mb-1">Verify OTP</h1>
+                <p className="text-sm text-muted-foreground mb-6">Sent to <span className="font-semibold text-foreground">+91 {phone}</span></p>
+                <div>
+                  <label className="block text-xs font-semibold mb-2">Enter 6-digit OTP</label>
+                  <div className="flex gap-2 justify-between mb-5">
+                    {otp.map((d, i) => (
+                      <input key={i} ref={el => { otpRefs.current[i] = el; }} type="tel" maxLength={1} value={d}
+                        onChange={e => handleOtpChange(i, e.target.value)} onKeyDown={e => handleOtpKey(i, e)}
+                        className="w-11 h-13 text-center text-lg font-bold bg-muted rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors aspect-square" />
+                    ))}
+                  </div>
+                  <button onClick={verifyOtp} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors">Verify &amp; Continue</button>
+                  <div className="text-center mt-4">
+                    {timer > 0
+                      ? <p className="text-xs text-muted-foreground">Resend OTP in <span className="font-bold text-foreground">{timer}s</span></p>
+                      : <button onClick={() => { setOtp(["","","","","",""]); setTimer(30); }} className="text-xs text-primary font-semibold hover:underline">Resend OTP</button>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Register step */}
+            {step === "register" && (
+              <div>
+                <h1 className="text-2xl font-extrabold font-['Plus_Jakarta_Sans'] mb-1">Complete Profile</h1>
+                <p className="text-sm text-muted-foreground mb-6">Almost there — tell us a bit about yourself</p>
+                <div className="space-y-3 mb-5">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Full Name <span className="text-destructive">*</span></label>
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder="Your full name" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" autoFocus />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Email <span className="text-muted-foreground font-normal">(optional)</span></label>
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+                  </div>
+                  <label className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${isRetailer ? "border-primary bg-primary/5" : "border-border hover:border-border/80"}`}>
+                    <input type="checkbox" checked={isRetailer} onChange={e => setIsRetailer(e.target.checked)} className="w-4 h-4 accent-primary flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-sm">Purchasing for a registered business</p>
+                      <p className="text-xs text-muted-foreground">Get GST invoices &amp; B2B bulk pricing</p>
+                    </div>
+                  </label>
+                  {isRetailer && (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">GSTIN</label>
+                      <input value={gstin} onChange={e => { setGstin(e.target.value.toUpperCase()); setGstinError(""); }} placeholder="27AABCC1234M1Z5" maxLength={15} className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm font-mono" />
+                      {gstinError && <p className="text-xs text-destructive mt-1">{gstinError}</p>}
+                      <p className="text-[10px] text-muted-foreground mt-1">15-character GST identification number. Leave blank if unavailable.</p>
+                    </div>
+                  )}
+                </div>
+                <button onClick={handleRegister} disabled={!name.trim()} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors">
+                  Create Account &amp; Continue
+                </button>
+              </div>
+            )}
+
+            {/* Trust row */}
+            <div className="flex justify-center gap-6 mt-8 pt-6 border-t border-border">
+              {[{ icon: ShieldCheck, label: "ISO Certified" }, { icon: Lock, label: "Secure OTP" }, { icon: Truck, label: "Pan-India" }].map(t => (
+                <div key={t.label} className="flex flex-col items-center gap-1">
+                  <t.icon className="w-4.5 h-4.5 text-primary" />
+                  <span className="text-[10px] text-muted-foreground font-medium">{t.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer note */}
+        <div className="px-6 md:px-10 pb-6 text-center">
+          <p className="text-[10px] text-muted-foreground">© 2025 CareKart Pvt. Ltd. · By continuing you agree to our <span className="underline cursor-pointer">Terms</span> &amp; <span className="underline cursor-pointer">Privacy Policy</span></p>
         </div>
       </div>
     </div>
@@ -837,46 +975,294 @@ function ConfirmationPage({ cart, setPage }: { cart: CartItem[]; setPage: (p: Pa
 }
 
 // ─── Account ────────────────────────────────────────────────────────────────────
-function AccountDashboardPage({ currentUser, setPage, isLoggedIn, setOrderId }: { currentUser: AppUser | null; setPage: (p: Page) => void; isLoggedIn: boolean; setOrderId: (id: string) => void }) {
-  if (!isLoggedIn || !currentUser) return <div className="max-w-6xl mx-auto px-4 py-16 text-center pb-24"><h2 className="text-xl font-bold mb-3">Please login to view your account</h2><button onClick={() => setPage("login")} className="px-6 py-3 bg-primary text-white font-bold rounded-2xl">Login / Sign Up</button></div>;
+type AccountView = "home" | "orders" | "addresses" | "business" | "edit-profile";
+
+const MOCK_ADDRESSES = [
+  { id: "a1", label: "Home", name: "Rahul Sharma", line1: "12, MG Road, Andheri East", city: "Mumbai", state: "Maharashtra", pin: "400069", phone: "9876543210", default: true },
+  { id: "a2", label: "Office", name: "Rahul Sharma", line1: "45, Bandra Kurla Complex", city: "Mumbai", state: "Maharashtra", pin: "400051", phone: "9876543210", default: false },
+];
+
+function AccountDashboardPage({ currentUser, setPage, isLoggedIn, setOrderId, onSignOut, onUpdateUser }: {
+  currentUser: AppUser | null; setPage: (p: Page) => void; isLoggedIn: boolean;
+  setOrderId: (id: string) => void; onSignOut: () => void; onUpdateUser: (u: AppUser) => void;
+}) {
+  const [view, setView] = useState<AccountView>("home");
+  const [editName, setEditName] = useState(currentUser?.name ?? "");
+  const [editEmail, setEditEmail] = useState(currentUser?.email ?? "");
+  const [editSaved, setEditSaved] = useState(false);
+  const [addresses, setAddresses] = useState(MOCK_ADDRESSES);
+  const [showAddAddr, setShowAddAddr] = useState(false);
+  const [newAddr, setNewAddr] = useState({ label: "Home", name: "", line1: "", city: "", state: "", pin: "", phone: "" });
+
+  if (!isLoggedIn || !currentUser) return (
+    <div className="max-w-6xl mx-auto px-4 py-16 text-center pb-24">
+      <h2 className="text-xl font-bold mb-3">Please login to view your account</h2>
+      <button onClick={() => setPage("login")} className="px-6 py-3 bg-primary text-white font-bold rounded-2xl">Login / Sign Up</button>
+    </div>
+  );
+
   const STATUS_COLORS: Record<string, string> = { Delivered: "text-emerald-600 bg-emerald-50", "In Transit": "text-blue-600 bg-blue-50", Cancelled: "text-red-600 bg-red-50" };
+
+  const handleSaveProfile = () => {
+    if (!editName.trim()) return;
+    onUpdateUser({ ...currentUser, name: editName.trim(), email: editEmail.trim() });
+    setEditSaved(true);
+    setTimeout(() => setEditSaved(false), 2500);
+  };
+
+  const handleSignOut = () => { onSignOut(); setPage("home"); };
+
+  const navCards = [
+    { icon: Package, label: "Your Orders", sub: "Track & manage", action: () => setView("orders"), color: "bg-blue-50 text-blue-600" },
+    { icon: MapPin, label: "Addresses", sub: "Delivery addresses", action: () => setView("addresses"), color: "bg-emerald-50 text-emerald-600" },
+    { icon: Building2, label: "Business Info", sub: "GST & company", action: () => setView("business"), color: "bg-purple-50 text-purple-600" },
+    { icon: LogOut, label: "Sign Out", sub: "Log out safely", action: handleSignOut, color: "bg-red-50 text-red-500" },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto px-4 py-4 md:py-6 pb-24 md:pb-8">
-      <div className="bg-primary rounded-2xl p-5 text-white mb-5 flex items-center gap-4">
-        <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-2xl font-extrabold flex-shrink-0">{currentUser.name[0]?.toUpperCase()}</div>
-        <div className="flex-1">
-          <h1 className="text-xl font-extrabold font-['Plus_Jakarta_Sans']">{currentUser.name}</h1>
-          <p className="text-sm text-blue-200">+91 {currentUser.phone}</p>
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${currentUser.accountType === "business" ? "bg-yellow-400/20 text-yellow-300" : "bg-white/10 text-white/70"}`}>{currentUser.accountType === "business" ? "🏢 Business Account" : "👤 Retail Account"}</span>
-            {currentUser.gstin && <BadgeCheck className="w-4 h-4 text-blue-300" />}
+    <div className="max-w-3xl mx-auto px-4 py-4 md:py-6 pb-24 md:pb-8">
+
+      {/* ── HOME ── */}
+      {view === "home" && (
+        <div>
+          {/* Profile hero card */}
+          <div className="bg-primary rounded-2xl p-5 text-white mb-5">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-2xl font-extrabold flex-shrink-0">
+                {currentUser.name[0]?.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] truncate">{currentUser.name}</h1>
+                <p className="text-sm text-blue-200">+91 {currentUser.phone}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${currentUser.accountType === "business" ? "bg-yellow-400/20 text-yellow-300" : "bg-white/10 text-white/70"}`}>
+                    {currentUser.accountType === "business" ? "🏢 Business Account" : "👤 Retail Account"}
+                  </span>
+                  {currentUser.gstin && <BadgeCheck className="w-4 h-4 text-blue-300" />}
+                </div>
+              </div>
+              <button onClick={() => { setEditName(currentUser.name); setEditEmail(currentUser.email); setView("edit-profile"); }} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white/15 hover:bg-white/25 rounded-xl text-xs font-semibold text-white transition-colors">
+                <Edit2 className="w-3.5 h-3.5" />Edit
+              </button>
+            </div>
+            {currentUser.email && <p className="text-xs text-blue-300 mt-2 pl-[72px]">{currentUser.email}</p>}
+          </div>
+
+          {/* Nav cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            {navCards.map(item => (
+              <button key={item.label} onClick={item.action} className="bg-white border border-border rounded-2xl p-4 text-left hover:shadow-md transition-all group">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${item.color}`}>
+                  <item.icon className="w-5 h-5" />
+                </div>
+                <p className="font-bold text-sm">{item.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{item.sub}</p>
+              </button>
+            ))}
+          </div>
+
+          {/* Quick recent order preview */}
+          <div className="bg-white border border-border rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 className="font-bold text-sm">Recent Order</h2>
+              <button onClick={() => setView("orders")} className="text-xs text-primary font-semibold flex items-center gap-1">View all<ChevronRight className="w-3.5 h-3.5" /></button>
+            </div>
+            {(() => {
+              const o = MOCK_ORDERS[0];
+              return (
+                <div>
+                  <div className="flex items-center justify-between px-5 py-3 bg-muted/40 border-b border-border text-xs">
+                    <div className="flex gap-4">
+                      <div><p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wide">Order ID</p><p className="font-mono font-bold">{o.id}</p></div>
+                      <div><p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wide">Date</p><p className="font-semibold">{o.date}</p></div>
+                      <div><p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wide">Total</p><p className="font-extrabold">₹{o.total.toLocaleString()}</p></div>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${STATUS_COLORS[o.status] ?? "bg-muted text-muted-foreground"}`}>{o.status}</span>
+                  </div>
+                  <div className="p-4 flex items-center gap-3">
+                    <ImageWithFallback src={o.items[0].img} alt={o.items[0].name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">{o.items[0].name}</p>
+                      <p className="text-xs text-muted-foreground">Qty: {o.items[0].qty}{o.items.length > 1 ? ` + ${o.items.length - 1} more` : ""}</p>
+                    </div>
+                    <button onClick={() => { setOrderId(o.id); setPage("account-order"); }} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-xl">
+                      <Eye className="w-3.5 h-3.5" />Track
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        {[{ icon: Package, label: "Your Orders", sub: "Track & manage" },{ icon: MapPin, label: "Addresses", sub: "Delivery addresses" },{ icon: Building2, label: "Business Info", sub: "GST & company" },{ icon: LogOut, label: "Sign Out", sub: "Log out" }].map(item => (
-          <button key={item.label} className="bg-white border border-border rounded-2xl p-4 text-left hover:shadow-md transition-all group">
-            <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center mb-3 group-hover:bg-primary/15"><item.icon className="w-5 h-5 text-primary" /></div>
-            <p className="font-bold text-sm">{item.label}</p><p className="text-xs text-muted-foreground mt-0.5">{item.sub}</p>
-          </button>
-        ))}
-      </div>
-      <div>
-        <h2 className="text-lg font-extrabold font-['Plus_Jakarta_Sans'] mb-4">Your Orders</h2>
-        <div className="space-y-3">{MOCK_ORDERS.map(order => (
-          <div key={order.id} className="bg-white border border-border rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b border-border">
-              <div className="flex items-center gap-4 text-xs"><div><p className="font-bold text-[10px] uppercase tracking-wide text-muted-foreground">Order ID</p><p className="font-mono font-bold text-foreground">{order.id}</p></div><div><p className="font-bold text-[10px] uppercase tracking-wide text-muted-foreground">Date</p><p className="font-semibold">{order.date}</p></div><div><p className="font-bold text-[10px] uppercase tracking-wide text-muted-foreground">Total</p><p className="font-extrabold">₹{order.total.toLocaleString()}</p></div></div>
-              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${STATUS_COLORS[order.status] ?? "bg-muted text-muted-foreground"}`}>{order.status}</span>
-            </div>
-            <div className="p-4">{order.items.map((item, idx) => <div key={idx} className="flex items-center gap-3 mb-3 last:mb-0"><ImageWithFallback src={item.img} alt={item.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" /><div className="flex-1 min-w-0"><p className="font-semibold text-sm truncate">{item.name}</p><p className="text-xs text-muted-foreground">Qty: {item.qty}</p><p className="text-sm font-bold">₹{item.price.toLocaleString()}</p></div></div>)}</div>
-            <div className="px-4 pb-4 flex flex-wrap gap-2">
-              <button onClick={() => { setOrderId(order.id); setPage("account-order"); }} className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-xl"><Eye className="w-3.5 h-3.5" />View Details</button>
-              {order.status === "Delivered" && <><button className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl"><Download className="w-3.5 h-3.5" />Invoice</button><button className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl"><RefreshCw className="w-3.5 h-3.5" />Reorder</button></>}
-            </div>
+      )}
+
+      {/* ── ORDERS ── */}
+      {view === "orders" && (
+        <div>
+          <button onClick={() => setView("home")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"><ArrowLeft className="w-4 h-4" />Back to Profile</button>
+          <h2 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] mb-4">Your Orders</h2>
+          <div className="space-y-3">
+            {MOCK_ORDERS.map(order => (
+              <div key={order.id} className="bg-white border border-border rounded-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b border-border">
+                  <div className="flex items-center gap-4 text-xs">
+                    <div><p className="font-bold text-[10px] uppercase tracking-wide text-muted-foreground">Order ID</p><p className="font-mono font-bold text-foreground">{order.id}</p></div>
+                    <div><p className="font-bold text-[10px] uppercase tracking-wide text-muted-foreground">Date</p><p className="font-semibold">{order.date}</p></div>
+                    <div><p className="font-bold text-[10px] uppercase tracking-wide text-muted-foreground">Total</p><p className="font-extrabold">₹{order.total.toLocaleString()}</p></div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${STATUS_COLORS[order.status] ?? "bg-muted text-muted-foreground"}`}>{order.status}</span>
+                </div>
+                <div className="p-4">
+                  {order.items.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 mb-3 last:mb-0">
+                      <ImageWithFallback src={item.img} alt={item.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                      <div className="flex-1 min-w-0"><p className="font-semibold text-sm truncate">{item.name}</p><p className="text-xs text-muted-foreground">Qty: {item.qty}</p><p className="text-sm font-bold">₹{item.price.toLocaleString()}</p></div>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 pb-4 flex flex-wrap gap-2">
+                  <button onClick={() => { setOrderId(order.id); setPage("account-order"); }} className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-xl"><Eye className="w-3.5 h-3.5" />View Details</button>
+                  {order.status === "Delivered" && <>
+                    <button className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl"><Download className="w-3.5 h-3.5" />Invoice</button>
+                    <button className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl"><RefreshCw className="w-3.5 h-3.5" />Reorder</button>
+                  </>}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}</div>
-      </div>
+        </div>
+      )}
+
+      {/* ── ADDRESSES ── */}
+      {view === "addresses" && (
+        <div>
+          <button onClick={() => setView("home")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"><ArrowLeft className="w-4 h-4" />Back to Profile</button>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-extrabold font-['Plus_Jakarta_Sans']">Saved Addresses</h2>
+            <button onClick={() => setShowAddAddr(true)} className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-xl"><Plus className="w-3.5 h-3.5" />Add New</button>
+          </div>
+          <div className="space-y-3">
+            {addresses.map(addr => (
+              <div key={addr.id} className={`bg-white border-2 rounded-2xl p-4 transition-all ${addr.default ? "border-primary" : "border-border"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-extrabold bg-muted px-2 py-0.5 rounded-lg">{addr.label}</span>
+                    {addr.default && <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Default</span>}
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    {!addr.default && <button onClick={() => setAddresses(prev => prev.map(a => ({ ...a, default: a.id === addr.id })))} className="text-[10px] font-semibold text-primary hover:underline px-2 py-1">Set Default</button>}
+                    <button onClick={() => setAddresses(prev => prev.filter(a => a.id !== addr.id))} className="p-1.5 hover:bg-red-50 rounded-lg text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+                <p className="font-semibold text-sm">{addr.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{addr.line1}</p>
+                <p className="text-xs text-muted-foreground">{addr.city}, {addr.state} — {addr.pin}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">📞 +91 {addr.phone}</p>
+              </div>
+            ))}
+            {addresses.length === 0 && <div className="text-center py-10 text-muted-foreground bg-white border border-border rounded-2xl"><MapPin className="w-10 h-10 mx-auto mb-2 text-border" /><p>No saved addresses</p></div>}
+          </div>
+          {/* Add address form */}
+          {showAddAddr && (
+            <div className="mt-4 bg-white border-2 border-primary rounded-2xl p-5">
+              <h3 className="font-bold text-sm mb-4">New Address</h3>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  {["Home", "Office", "Other"].map(l => <button key={l} onClick={() => setNewAddr(a => ({ ...a, label: l }))} className={`px-3 py-1.5 text-xs font-semibold rounded-xl border-2 transition-all ${newAddr.label === l ? "border-primary bg-primary/5 text-primary" : "border-border"}`}>{l}</button>)}
+                </div>
+                {[{ k: "name", label: "Full Name", ph: "Recipient name" }, { k: "line1", label: "Address", ph: "Flat, Street, Area" }, { k: "city", label: "City", ph: "Mumbai" }, { k: "state", label: "State", ph: "Maharashtra" }, { k: "pin", label: "PIN Code", ph: "400001" }, { k: "phone", label: "Phone", ph: "9876543210" }].map(f => (
+                  <div key={f.k}><label className="block text-xs font-semibold mb-1">{f.label}</label><input value={(newAddr as Record<string, string>)[f.k]} onChange={e => setNewAddr(a => ({ ...a, [f.k]: e.target.value }))} placeholder={f.ph} className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" /></div>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => { if (!newAddr.name || !newAddr.line1) return; setAddresses(prev => [...prev, { ...newAddr, id: `a${Date.now()}`, default: prev.length === 0 }]); setNewAddr({ label: "Home", name: "", line1: "", city: "", state: "", pin: "", phone: "" }); setShowAddAddr(false); }} className="flex-1 py-2.5 bg-primary text-white text-sm font-bold rounded-xl">Save Address</button>
+                <button onClick={() => setShowAddAddr(false)} className="px-4 py-2.5 bg-muted text-muted-foreground text-sm font-semibold rounded-xl">Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── BUSINESS INFO ── */}
+      {view === "business" && (
+        <div>
+          <button onClick={() => setView("home")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"><ArrowLeft className="w-4 h-4" />Back to Profile</button>
+          <h2 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] mb-4">Business Info</h2>
+          <div className="bg-white border border-border rounded-2xl p-5 space-y-4">
+            <div className={`flex items-center gap-3 p-3 rounded-xl ${currentUser.accountType === "business" ? "bg-blue-50 border border-blue-100" : "bg-muted"}`}>
+              <Building2 className={`w-5 h-5 flex-shrink-0 ${currentUser.accountType === "business" ? "text-blue-600" : "text-muted-foreground"}`} />
+              <div>
+                <p className="font-semibold text-sm">{currentUser.accountType === "business" ? "Business Account" : "Retail Account"}</p>
+                <p className="text-xs text-muted-foreground">{currentUser.accountType === "business" ? "GST invoices & bulk pricing enabled" : "Upgrade to business for GST invoices"}</p>
+              </div>
+            </div>
+            <div><label className="block text-xs font-semibold mb-1">GSTIN</label>
+              {currentUser.gstin ? (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-muted rounded-xl">
+                  <BadgeCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span className="font-mono text-sm font-bold">{currentUser.gstin}</span>
+                  <span className="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Verified</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <input placeholder="27AABCC1234M1Z5" maxLength={15} className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm font-mono" onChange={e => {}} />
+                  <p className="text-[10px] text-muted-foreground">Add your GSTIN to receive GST-compliant tax invoices and unlock B2B bulk pricing.</p>
+                  <button className="w-full py-2.5 bg-primary text-white text-sm font-bold rounded-xl">Save GSTIN</button>
+                </div>
+              )}
+            </div>
+            <div className="border-t border-border pt-4 space-y-2.5">
+              {[{ label: "Account Type", value: currentUser.accountType === "business" ? "Business" : "Retail" }, { label: "Member Since", value: currentUser.joinedAt }, { label: "Phone", value: `+91 ${currentUser.phone}` }].map(row => (
+                <div key={row.label} className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">{row.label}</span>
+                  <span className="text-xs font-semibold">{row.value}</span>
+                </div>
+              ))}
+            </div>
+            {currentUser.accountType === "retail" && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+                <p className="text-xs font-bold text-primary mb-1">Upgrade to Business</p>
+                <p className="text-[11px] text-muted-foreground mb-3">Add your GSTIN above to unlock bulk pricing, GST invoices, and dedicated B2B support.</p>
+                <button className="text-xs font-bold text-primary flex items-center gap-1">Learn more <ChevronRight className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT PROFILE ── */}
+      {view === "edit-profile" && (
+        <div>
+          <button onClick={() => setView("home")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5"><ArrowLeft className="w-4 h-4" />Back to Profile</button>
+          <h2 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] mb-4">Edit Profile</h2>
+          <div className="bg-white border border-border rounded-2xl p-5 space-y-4">
+            {/* Avatar */}
+            <div className="flex justify-center mb-2">
+              <div className="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center text-4xl font-extrabold text-white">
+                {(editName[0] || currentUser.name[0])?.toUpperCase()}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">Full Name <span className="text-destructive">*</span></label>
+              <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Your full name" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">Email <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="you@example.com" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">Mobile Number</label>
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-muted rounded-xl opacity-60">
+                <span className="text-sm">🇮🇳 +91 {currentUser.phone}</span>
+                <span className="ml-auto text-[10px] text-muted-foreground">Cannot be changed</span>
+              </div>
+            </div>
+            <button onClick={handleSaveProfile} disabled={!editName.trim()} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center justify-center gap-2">
+              {editSaved ? <><Check className="w-4 h-4" />Saved!</> : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1918,6 +2304,8 @@ export default function App() {
   const [users, setUsers] = useState<AppUser[]>(INIT_USERS);
 
   const handleLogin = (user: AppUser) => { setIsLoggedIn(true); setCurrentUser(user); setPage("account"); };
+  const handleSignOut = () => { setIsLoggedIn(false); setCurrentUser(null); };
+  const handleUpdateUser = (u: AppUser) => { setCurrentUser(u); setUsers(prev => prev.map(x => x.phone === u.phone ? u : x)); };
   const addUser = (user: AppUser) => setUsers(prev => [...prev.filter(u => u.phone !== user.phone), user]);
 
   const addToCart = (product: Product, size: string, packSize = 1, packPrice = product.price) => {
@@ -1937,7 +2325,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
-      {showHeader && <Header cartCount={cartCount} setPage={setPage} isLoggedIn={isLoggedIn} page={page} />}
+      {showHeader && <Header cartCount={cartCount} setPage={setPage} isLoggedIn={isLoggedIn} page={page} currentUser={currentUser} />}
 
       {page === "home" && <HomePage products={products} setPage={setPage} setDetailId={setDetailId} addToCart={addToCart} banners={banners} />}
       {page === "listing" && <ListingPage products={products} setPage={setPage} setDetailId={setDetailId} addToCart={addToCart} />}
@@ -1945,7 +2333,7 @@ export default function App() {
       {page === "cart" && <CartPage cart={cart} setPage={setPage} updateQty={updateQty} removeFromCart={removeFromCart} />}
       {page === "checkout" && <CheckoutPage cart={cart} setPage={setPage} userPhone={currentUser?.phone ?? ""} />}
       {page === "confirmation" && <ConfirmationPage cart={cart} setPage={setPage} />}
-      {page === "account" && <AccountDashboardPage currentUser={currentUser} setPage={setPage} isLoggedIn={isLoggedIn} setOrderId={setActiveOrderId} />}
+      {page === "account" && <AccountDashboardPage currentUser={currentUser} setPage={setPage} isLoggedIn={isLoggedIn} setOrderId={setActiveOrderId} onSignOut={handleSignOut} onUpdateUser={handleUpdateUser} />}
       {page === "account-order" && <OrderDetailPage orderId={activeOrderId} setPage={setPage} />}
       {page === "admin" && <AdminPanel products={products} setProducts={setProducts} users={users} banners={banners} setBanners={setBanners} setPage={setPage} />}
       {page === "login" && <LoginPage onLogin={handleLogin} setPage={setPage} existingUsers={users} addUser={addUser} />}
