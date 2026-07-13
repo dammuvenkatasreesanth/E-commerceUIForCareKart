@@ -178,21 +178,178 @@ function MobileBottomNav({ page, setPage, cartCount, isLoggedIn }: { page: Page;
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────────
-function Header({ cartCount, setPage, isLoggedIn, page, currentUser }: { cartCount: number; setPage: (p: Page) => void; isLoggedIn: boolean; page: Page; currentUser: AppUser | null }) {
+function Header({ cartCount, setPage, isLoggedIn, page, currentUser, products, searchQuery, setSearchQuery }: {
+  cartCount: number; setPage: (p: Page) => void; isLoggedIn: boolean; page: Page;
+  currentUser: AppUser | null; products: Product[]; searchQuery: string; setSearchQuery: (q: string) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const trimmed = searchQuery.trim().toLowerCase();
+  const suggestions = trimmed.length >= 1
+    ? products.filter(p =>
+        p.name.toLowerCase().includes(trimmed) ||
+        p.category.toLowerCase().includes(trimmed) ||
+        p.tagline.toLowerCase().includes(trimmed) ||
+        p.material?.toLowerCase().includes(trimmed)
+      ).slice(0, 6)
+    : [];
+
+  const showDropdown = focused && trimmed.length >= 1;
+
+  const commit = () => {
+    if (!trimmed) return;
+    setPage("listing");
+    setFocused(false);
+    setMobileSearchOpen(false);
+  };
+
+  const pickProduct = (id: number) => {
+    setFocused(false);
+    setMobileSearchOpen(false);
+    setPage("detail");
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setFocused(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const SearchDropdown = () => (
+    <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-border rounded-2xl shadow-lg z-50 overflow-hidden">
+      {suggestions.length > 0 ? (
+        <>
+          <div className="px-3 py-2 border-b border-border">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Products</p>
+          </div>
+          {suggestions.map(p => (
+            <button key={p.id} onMouseDown={() => { setSearchQuery(p.name); pickProduct(p.id); }} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors text-left">
+              <ImageWithFallback src={p.images[0]} alt={p.name} className="w-9 h-9 rounded-xl object-cover flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{p.name}</p>
+                <p className="text-[11px] text-muted-foreground">{p.category} · ₹{p.price}</p>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.inStock ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+                {p.inStock ? "In Stock" : "Out of Stock"}
+              </span>
+            </button>
+          ))}
+          <button onMouseDown={commit} className="w-full flex items-center gap-2 px-4 py-3 border-t border-border hover:bg-muted text-sm font-semibold text-primary transition-colors">
+            <Search className="w-4 h-4" />See all results for "{searchQuery}"
+          </button>
+        </>
+      ) : (
+        <div className="px-4 py-6 text-center">
+          <p className="text-sm font-semibold text-muted-foreground">No products found for "{searchQuery}"</p>
+          <p className="text-xs text-muted-foreground mt-1">Try gloves, masks, sanitizer…</p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-border shadow-sm">
       <div className="bg-primary text-white text-center py-1.5 text-xs font-medium hidden sm:block">
         🚚 Free shipping above ₹2,000 &nbsp;|&nbsp; ISO 13485 Certified &nbsp;|&nbsp; Same-day dispatch before 3 PM
       </div>
+
+      {/* Mobile full-screen search overlay */}
+      {mobileSearchOpen && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col md:hidden">
+          <div className="flex items-center gap-3 px-4 h-14 border-b border-border">
+            <button onClick={() => { setMobileSearchOpen(false); setSearchQuery(""); setFocused(false); }} className="p-1.5"><ArrowLeft className="w-5 h-5 text-muted-foreground" /></button>
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                ref={mobileInputRef}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onKeyDown={e => e.key === "Enter" && commit()}
+                placeholder="Search gloves, masks, PPE kits…"
+                autoFocus
+                className="w-full pl-9 pr-4 py-2 text-sm bg-muted rounded-xl border border-transparent focus:border-primary/30 focus:outline-none"
+              />
+              {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-muted-foreground" /></button>}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {trimmed.length === 0 && (
+              <div className="px-4 py-6">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">Popular Searches</p>
+                <div className="flex flex-wrap gap-2">
+                  {["Nitrile Gloves", "N95 Mask", "Sanitizer", "PPE Kit", "Face Shield", "Surgical Gloves"].map(s => (
+                    <button key={s} onClick={() => { setSearchQuery(s); setFocused(true); }} className="px-3 py-1.5 bg-muted rounded-full text-sm font-medium hover:bg-primary/10 hover:text-primary transition-colors">{s}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {trimmed.length >= 1 && suggestions.length > 0 && (
+              <div>
+                {suggestions.map(p => (
+                  <button key={p.id} onClick={() => { setSearchQuery(p.name); pickProduct(p.id); }} className="w-full flex items-center gap-3 px-4 py-3 border-b border-border hover:bg-muted transition-colors text-left">
+                    <ImageWithFallback src={p.images[0]} alt={p.name} className="w-11 h-11 rounded-xl object-cover flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">{p.category} · ₹{p.price}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))}
+                <button onClick={commit} className="w-full flex items-center gap-2 px-4 py-4 hover:bg-muted text-sm font-semibold text-primary transition-colors border-b border-border">
+                  <Search className="w-4 h-4" />See all results for "{searchQuery}"
+                </button>
+              </div>
+            )}
+            {trimmed.length >= 1 && suggestions.length === 0 && (
+              <div className="px-4 py-10 text-center">
+                <p className="text-sm font-semibold">No results for "{searchQuery}"</p>
+                <p className="text-xs text-muted-foreground mt-1">Try gloves, masks, sanitizer…</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
         <button onClick={() => setPage("home")} className="flex items-center flex-shrink-0">
           <Logo className="h-8" />
         </button>
-        <div className="flex-1 mx-3 hidden md:block">
-          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input placeholder="Search gloves, masks, PPE kits…" className="w-full pl-9 pr-4 py-2.5 text-sm bg-muted rounded-xl border border-transparent focus:border-primary/30 focus:outline-none" /></div>
+
+        {/* Desktop search */}
+        <div ref={dropdownRef} className="flex-1 mx-3 hidden md:block relative">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              ref={inputRef}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onKeyDown={e => e.key === "Enter" && commit()}
+              placeholder="Search gloves, masks, PPE kits…"
+              className="w-full pl-9 pr-9 py-2.5 text-sm bg-muted rounded-xl border border-transparent focus:border-primary/30 focus:outline-none transition-colors"
+            />
+            {searchQuery && (
+              <button onClick={() => { setSearchQuery(""); inputRef.current?.focus(); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {showDropdown && <SearchDropdown />}
         </div>
+
         <div className="flex items-center gap-1 ml-auto">
-          {/* Mobile: cart + profile icons */}
+          {/* Mobile: search trigger + cart + profile */}
+          <button onClick={() => { setMobileSearchOpen(true); setFocused(true); }} className="p-2 hover:bg-muted rounded-xl flex md:hidden">
+            <Search className="w-5 h-5 text-muted-foreground" />
+          </button>
           <button onClick={() => setPage("cart")} className="relative p-2 hover:bg-muted rounded-xl flex md:hidden">
             <ShoppingCart className="w-5 h-5" />
             {cartCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>}
@@ -202,12 +359,16 @@ function Header({ cartCount, setPage, isLoggedIn, page, currentUser }: { cartCou
               ? <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center text-white text-xs font-extrabold">{currentUser?.name[0]?.toUpperCase() ?? "U"}</div>
               : <User className="w-5 h-5" />}
           </button>
-          {/* Desktop: cart + account button + admin */}
-          <button onClick={() => setPage("cart")} className="relative p-2 hover:bg-muted rounded-xl hidden md:flex"><ShoppingCart className="w-5 h-5" />{cartCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>}</button>
+          {/* Desktop */}
+          <button onClick={() => setPage("cart")} className="relative p-2 hover:bg-muted rounded-xl hidden md:flex">
+            <ShoppingCart className="w-5 h-5" />
+            {cartCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>}
+          </button>
           <button onClick={() => setPage(isLoggedIn ? "account" : "login")} className="hidden md:flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"><User className="w-4 h-4" />{isLoggedIn ? "Account" : "Login"}</button>
           <button onClick={() => setPage("admin")} className="hidden md:flex items-center gap-1.5 px-3 py-2 bg-muted text-foreground text-sm font-semibold rounded-xl hover:bg-border transition-colors"><LayoutDashboard className="w-4 h-4" /></button>
         </div>
       </div>
+
       <div className="hidden md:block border-t border-border">
         <div className="max-w-6xl mx-auto px-4 flex gap-6 overflow-x-auto py-2">
           {CATEGORIES.slice(1).map(c => <button key={c} onClick={() => setPage("listing")} className="text-muted-foreground hover:text-primary whitespace-nowrap font-medium transition-colors text-xs">{c}</button>)}
@@ -534,11 +695,6 @@ function HomePage({ products, setPage, setDetailId, addToCart, banners }: {
       {/* Banner carousel */}
       <BannerCarousel banners={banners} setPage={setPage} />
 
-      {/* Mobile search */}
-      <div className="mb-5 md:hidden">
-        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input placeholder="Search gloves, masks, PPE…" className="w-full pl-9 pr-4 py-3 text-sm bg-white border border-border rounded-xl focus:border-primary/40 focus:outline-none" /></div>
-      </div>
-
       {/* Stats strip */}
       <div className="bg-white border border-border rounded-2xl mb-6 md:mb-8 overflow-hidden">
         <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border">
@@ -701,13 +857,17 @@ function HomePage({ products, setPage, setDetailId, addToCart, banners }: {
 }
 
 // ─── Listing Page ──────────────────────────────────────────────────────────────
-function ListingPage({ products, setPage, setDetailId, addToCart }: { products: Product[]; setPage: (p: Page) => void; setDetailId: (id: number) => void; addToCart: (p: Product, size: string) => void }) {
+function ListingPage({ products, setPage, setDetailId, addToCart, initialSearch = "" }: { products: Product[]; setPage: (p: Page) => void; setDetailId: (id: number) => void; addToCart: (p: Product, size: string) => void; initialSearch?: string }) {
   const [activeCategory, setActiveCategory] = useState("All");
   const [sortBy, setSortBy] = useState("popular");
-  const filtered = products.filter(p => activeCategory === "All" || p.category === activeCategory);
+  const [localSearch, setLocalSearch] = useState(initialSearch);
+  const q = localSearch.trim().toLowerCase();
+  const filtered = products
+    .filter(p => activeCategory === "All" || p.category === activeCategory)
+    .filter(p => !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || p.tagline.toLowerCase().includes(q));
   return (
     <div className="max-w-6xl mx-auto px-4 py-4 md:py-6 pb-24 md:pb-8">
-      <div className="mb-4 md:hidden"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input placeholder="Search products…" className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-border rounded-xl focus:border-primary/40 focus:outline-none" /></div></div>
+      <div className="mb-4 md:hidden"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input value={localSearch} onChange={e => setLocalSearch(e.target.value)} placeholder="Search products…" className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-border rounded-xl focus:border-primary/40 focus:outline-none" />{localSearch && <button onClick={() => setLocalSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-muted-foreground" /></button>}</div></div>
       <div className="flex flex-col md:flex-row gap-6">
         <aside className="hidden md:block w-52 flex-shrink-0">
           <div className="bg-white border border-border rounded-2xl p-4 sticky top-20">
@@ -717,12 +877,21 @@ function ListingPage({ products, setPage, setDetailId, addToCart }: { products: 
           </div>
         </aside>
         <div className="flex-1">
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-3 md:hidden">{CATEGORIES.map(cat => <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${activeCategory === cat ? "bg-primary text-white" : "bg-white border border-border text-muted-foreground"}`}>{cat}</button>)}</div>
+          <div className="-mx-4 px-4 flex gap-2 overflow-x-auto mb-3 md:hidden scrollbar-none">{CATEGORIES.map(cat => <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${activeCategory === cat ? "bg-primary text-white" : "bg-white border border-border text-muted-foreground"}`}>{cat}</button>)}<span className="flex-shrink-0 w-2" /></div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-muted-foreground">{filtered.length} products</p>
+            <p className="text-sm text-muted-foreground">{filtered.length} product{filtered.length !== 1 ? "s" : ""}{q ? ` for "${localSearch}"` : ""}</p>
             <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="text-xs bg-muted border-none rounded-lg px-2 py-1.5 focus:outline-none"><option value="popular">Most Popular</option><option value="price-low">Price: Low to High</option><option value="price-high">Price: High to Low</option><option value="rating">Top Rated</option></select>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">{filtered.map(p => <ProductCard key={p.id} product={p} setPage={setPage} setDetailId={setDetailId} addToCart={addToCart} />)}</div>
+          {filtered.length === 0 ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
+              <Search className="w-12 h-12 text-border mb-4" />
+              <p className="font-bold text-lg mb-1">No products found</p>
+              <p className="text-sm text-muted-foreground mb-4">No results for "{localSearch}". Try a different term.</p>
+              <button onClick={() => setLocalSearch("")} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-xl">Clear Search</button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">{filtered.map(p => <ProductCard key={p.id} product={p} setPage={setPage} setDetailId={setDetailId} addToCart={addToCart} />)}</div>
+          )}
         </div>
       </div>
     </div>
@@ -2299,6 +2468,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [activeOrderId, setActiveOrderId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>(INIT_PRODUCTS);
   const [banners, setBanners] = useState<Banner[]>(INIT_BANNERS);
   const [users, setUsers] = useState<AppUser[]>(INIT_USERS);
@@ -2325,10 +2495,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
-      {showHeader && <Header cartCount={cartCount} setPage={setPage} isLoggedIn={isLoggedIn} page={page} currentUser={currentUser} />}
+      {showHeader && <Header cartCount={cartCount} setPage={setPage} isLoggedIn={isLoggedIn} page={page} currentUser={currentUser} products={products} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />}
 
       {page === "home" && <HomePage products={products} setPage={setPage} setDetailId={setDetailId} addToCart={addToCart} banners={banners} />}
-      {page === "listing" && <ListingPage products={products} setPage={setPage} setDetailId={setDetailId} addToCart={addToCart} />}
+      {page === "listing" && <ListingPage products={products} setPage={setPage} setDetailId={setDetailId} addToCart={addToCart} initialSearch={searchQuery} />}
       {page === "detail" && <ProductDetailPage product={product} setPage={setPage} addToCart={addToCart} />}
       {page === "cart" && <CartPage cart={cart} setPage={setPage} updateQty={updateQty} removeFromCart={removeFromCart} />}
       {page === "checkout" && <CheckoutPage cart={cart} setPage={setPage} userPhone={currentUser?.phone ?? ""} />}
