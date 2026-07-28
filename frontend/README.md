@@ -1,11 +1,6 @@
+# CareKart Frontend
 
-  # E-commerce UI for CareKart
+React 18 + Vite + TypeScript + Tailwind v4 storefront and staff portal.
 
-  This is a code bundle for E-commerce UI for CareKart. The original project is available at https://www.figma.com/design/eHTcSznYfbJOaaEQZpeOg1/E-commerce-UI-for-CareKart.
-
-  ## Running the code
-
-  Run `npm i` to install the dependencies.
-
-  Run `npm run dev` to start the development server.
-  
+See the [root README](../README.md) for full setup instructions (this app needs
+the backend running alongside it).

@@ -2,7 +2,7 @@
 
 ## One-time setup
 
-1. Create the Node.js Web App in hPanel, pointing at this `server/` directory.
+1. Create the Node.js Web App in hPanel, pointing at this `backend/` directory.
 2. Create the MySQL database from hPanel and note the connection details.
 3. Copy `.env.example` to `.env` on the server and fill in real values:
    - `DATABASE_URL` — Hostinger's MySQL connection string
@@ -30,6 +30,6 @@ Set Hostinger's Node app entry point to `dist/src/server.js` and its startup com
 
 ## Notes
 
-- `server/uploads/` holds product images, banners, and generated PDFs — back it up separately; it isn't in git.
+- `backend/uploads/` holds product images, banners, and generated PDFs — back it up separately; it isn't in git.
 - The in-process payment reconciliation sweep and any other background timers only run in the single Node process — this deployment assumes one instance, not a multi-instance/load-balanced setup.
 - `trust proxy` is enabled automatically when `NODE_ENV=production`, which is required for rate limiting and `req.ip` to see the real client IP behind Hostinger's reverse proxy.
