@@ -12,11 +12,11 @@ export async function initiate(req: Request, res: Response) {
 }
 
 export async function callback(req: Request, res: Response) {
-  const base64Response: string | undefined = req.body?.response;
-  if (!base64Response) throw new BadRequestError("Missing response payload");
-  const xVerify = req.headers["x-verify"] as string | undefined;
+  const rawBody = req.rawBody;
+  if (!rawBody) throw new BadRequestError("Missing request body");
+  const authorization = req.headers["authorization"] as string | undefined;
 
-  await paymentsService.handleCallback(base64Response, xVerify);
+  await paymentsService.handleCallback(authorization, rawBody);
   res.status(200).json({ success: true });
 }
 

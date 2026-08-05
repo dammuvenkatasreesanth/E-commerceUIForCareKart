@@ -9,6 +9,16 @@ import { apiRouter } from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware";
 import { globalApiLimiter } from "./middleware/rateLimit.middleware";
 
+// PhonePe's webhook signature covers the exact raw request body bytes, which
+// express.json() discards after parsing — capture them for payments.controller.
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: string;
+    }
+  }
+}
+
 export function createApp() {
   const app = express();
 
@@ -22,7 +32,14 @@ export function createApp() {
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
   app.use(cookieParser());
-  app.use(express.json({ limit: "2mb" }));
+  app.use(
+    express.json({
+      limit: "2mb",
+      verify: (req, _res, buf) => {
+        (req as express.Request).rawBody = buf.toString("utf-8");
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true }));
   app.use(pinoHttp({ logger }));
 

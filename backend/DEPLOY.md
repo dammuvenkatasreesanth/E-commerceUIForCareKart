@@ -12,7 +12,9 @@
    - `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` — from the Facebook Developer app (customer "Continue with Facebook")
    - `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_PUBLIC_BASE_URL` — Cloudflare R2 bucket for product/category/banner images and product videos; upload endpoints 400 until this is configured
    - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` — the mailbox that ships with the Hostinger plan
-   - `PHONEPE_MERCHANT_ID` / `PHONEPE_SALT_KEY` / `PHONEPE_SALT_INDEX` / `PHONEPE_ENV=PROD`
+   - `PHONEPE_CLIENT_ID` / `PHONEPE_CLIENT_SECRET` / `PHONEPE_CLIENT_VERSION` — from the PhonePe Business Dashboard's Production Credentials
+   - `PHONEPE_WEBHOOK_USERNAME` / `PHONEPE_WEBHOOK_PASSWORD` — set by you in the PhonePe dashboard's webhook config; must match here for callback verification
+   - `PHONEPE_ENV=PROD`
    - `PUBLIC_API_BASE_URL` — the real public URL of this API (e.g. `https://api.carekart.example/api/v1`) — PhonePe redirects and calls back here
    - `FRONTEND_ORDER_CONFIRMATION_URL` — the deployed frontend's confirmation page
    - `CORS_ORIGIN` — the deployed frontend's origin

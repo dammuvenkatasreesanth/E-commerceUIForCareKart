@@ -8,7 +8,7 @@ import * as controller from "./payments.controller";
 export const paymentsRouter = Router();
 
 paymentsRouter.post("/phonepe/initiate", authenticate, validate({ body: initiatePaymentSchema }), asyncHandler(controller.initiate));
-// PhonePe calls these directly — no user auth, integrity comes from the X-VERIFY checksum instead.
+// PhonePe calls these directly — no user auth, integrity comes from the webhook signature instead.
 paymentsRouter.post("/phonepe/callback", asyncHandler(controller.callback));
 paymentsRouter.get("/phonepe/redirect", asyncHandler(controller.redirect));
 

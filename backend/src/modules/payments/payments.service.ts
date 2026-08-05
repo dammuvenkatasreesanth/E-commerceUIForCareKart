@@ -76,8 +76,8 @@ async function applyPaymentResult(payment: Payment, result: phonepe.PhonePeCallb
   }
 }
 
-export async function handleCallback(base64Response: string, xVerifyHeader: string | undefined): Promise<void> {
-  const result = phonepe.verifyAndDecodeCallback(base64Response, xVerifyHeader);
+export async function handleCallback(authorizationHeader: string | undefined, rawBody: string): Promise<void> {
+  const result = phonepe.verifyAndDecodeCallback(authorizationHeader, rawBody);
 
   const payment = await prisma.payment.findUnique({ where: { merchantTransactionId: result.merchantTransactionId } });
   if (!payment) {
