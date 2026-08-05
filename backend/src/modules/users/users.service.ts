@@ -1,5 +1,7 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
-import { NotFoundError } from "../../lib/errors";
+import { NotFoundError, ConflictError } from "../../lib/errors";
+import { sendVerificationEmail } from "../auth/auth.service";
 import type { AccountType } from "@prisma/client";
 
 export async function getProfile(userId: number) {
@@ -11,6 +13,7 @@ export async function getProfile(userId: number) {
 interface UpdateProfileInput {
   name?: string;
   email?: string;
+  phone?: string;
   accountType?: AccountType;
   gstin?: string;
 }
@@ -22,7 +25,15 @@ export async function updateProfile(userId: number, input: UpdateProfileInput) {
   const data: Record<string, unknown> = {
     name: input.name ?? current.name,
     email: input.email ?? current.email,
+    phone: input.phone ?? current.phone,
   };
+
+  // Email is now an auth identifier — a silent, unverified change would let
+  // someone move their login email to an address they don't control.
+  const emailChanged = input.email !== undefined && input.email !== current.email;
+  if (emailChanged) {
+    data.emailVerified = false;
+  }
 
   if (input.accountType === "BUSINESS") {
     data.accountType = "BUSINESS";
@@ -37,5 +48,19 @@ export async function updateProfile(userId: number, input: UpdateProfileInput) {
     data.gstStatus = "NONE";
   }
 
-  return prisma.user.update({ where: { id: userId }, data });
+  let updated;
+  try {
+    updated = await prisma.user.update({ where: { id: userId }, data });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new ConflictError("This email is already in use.");
+    }
+    throw err;
+  }
+
+  if (emailChanged && updated.email) {
+    await sendVerificationEmail(updated.id, updated.email, updated.name ?? "");
+  }
+
+  return updated;
 }

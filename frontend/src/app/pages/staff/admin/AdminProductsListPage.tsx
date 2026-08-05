@@ -125,11 +125,15 @@ export function AdminProductsListPage() {
       if (editing) {
         await updateProduct.mutateAsync({ id: editing.id, input });
         toast.success("Product updated");
+        setShowForm(false);
       } else {
-        await createProduct.mutateAsync(input);
-        toast.success("Product created");
+        const created = await createProduct.mutateAsync(input);
+        // Images/video uploads need a real product id, which only exists after
+        // this first save — switch the same dialog into edit mode instead of
+        // closing it, so the user can add them right away.
+        setEditing(created);
+        toast.success("Product created — now add images or a video below");
       }
-      setShowForm(false);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -346,17 +350,27 @@ export function AdminProductsListPage() {
                 <input value={sizesInput} onChange={(e) => setSizesInput(e.target.value)} placeholder="S, M, L, XL" className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-semibold mb-1">Video URL (YouTube link or direct video file)</label>
-                <div className="flex gap-2">
-                  <input value={form.videoUrl} onChange={(e) => setForm((f) => ({ ...f, videoUrl: e.target.value }))} placeholder="https://youtube.com/watch?v=… or https://…/video.mp4" className="flex-1 px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
-                  {editing && (
-                    <label className={`flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs font-semibold cursor-pointer flex-shrink-0 ${uploadProductVideo.isPending ? "opacity-50 pointer-events-none" : ""}`}>
+                <label className="block text-xs font-semibold mb-1">Product Video</label>
+                {editing ? (
+                  <div>
+                    {form.videoUrl && (
+                      <div className="flex items-center gap-2 mb-2 text-xs bg-muted rounded-xl px-3 py-2">
+                        <Video className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                        <a href={form.videoUrl} target="_blank" rel="noreferrer" className="text-primary underline truncate flex-1 min-w-0">{form.videoUrl}</a>
+                        <button onClick={() => setForm((f) => ({ ...f, videoUrl: "" }))} type="button" className="text-muted-foreground hover:text-destructive flex-shrink-0">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    <label className={`inline-flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs font-semibold cursor-pointer ${uploadProductVideo.isPending ? "opacity-50 pointer-events-none" : ""}`}>
                       <Video className="w-3.5 h-3.5" />
-                      {uploadProductVideo.isPending ? "Uploading…" : "Upload"}
+                      {uploadProductVideo.isPending ? "Uploading…" : form.videoUrl ? "Replace Video" : "Upload Video"}
                       <input type="file" accept="video/*" className="hidden" onChange={handleUploadVideo} />
                     </label>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Save the product first — then you can upload a video here.</p>
+                )}
               </div>
               {editing && (
                 <div className="col-span-2 flex gap-4">
@@ -390,26 +404,30 @@ export function AdminProductsListPage() {
             </div>
 
             {/* Images */}
-            {editing && (
-              <div className="border-t border-border pt-3">
-                <label className="block text-xs font-semibold mb-2">Images</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {editingImages.map((img) => (
-                    <div key={img.id} className="relative w-16 h-16 flex-shrink-0">
-                      <img src={img.url} alt="" className="w-full h-full object-cover rounded-lg border border-border" />
-                      <button onClick={() => handleRemoveImage(img.id)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold cursor-pointer ${addProductImage.isPending ? "opacity-50 pointer-events-none" : ""}`}>
-                  <Upload className="w-3.5 h-3.5" />
-                  {addProductImage.isPending ? "Uploading…" : "Add Image"}
-                  <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
-                </label>
-              </div>
-            )}
+            <div className="border-t border-border pt-3">
+              <label className="block text-xs font-semibold mb-2">Images</label>
+              {editing ? (
+                <>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {editingImages.map((img) => (
+                      <div key={img.id} className="relative w-16 h-16 flex-shrink-0">
+                        <img src={img.url} alt="" className="w-full h-full object-cover rounded-lg border border-border" />
+                        <button onClick={() => handleRemoveImage(img.id)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold cursor-pointer ${addProductImage.isPending ? "opacity-50 pointer-events-none" : ""}`}>
+                    <Upload className="w-3.5 h-3.5" />
+                    {addProductImage.isPending ? "Uploading…" : "Add Image"}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
+                  </label>
+                </>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">Save the product first — then you can add images here.</p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 border border-border rounded-xl text-sm font-semibold">Cancel</button>

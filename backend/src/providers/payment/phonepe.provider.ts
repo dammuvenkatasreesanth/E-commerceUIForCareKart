@@ -13,6 +13,16 @@ function sha256Hex(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
+// crypto.timingSafeEqual throws on length mismatch rather than returning
+// false, so check lengths first — a length mismatch isn't itself a secret,
+// so this early return doesn't reintroduce a timing side-channel.
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 function xVerifyFor(base64Payload: string, path: string): string {
   return `${sha256Hex(base64Payload + path + env.PHONEPE_SALT_KEY)}###${env.PHONEPE_SALT_INDEX}`;
 }
@@ -89,7 +99,7 @@ export function verifyAndDecodeCallback(base64Response: string, xVerifyHeader: s
   if (!xVerifyHeader) throw new AppError("Missing signature", 400);
 
   const expected = `${sha256Hex(base64Response + env.PHONEPE_SALT_KEY)}###${env.PHONEPE_SALT_INDEX}`;
-  if (expected !== xVerifyHeader) {
+  if (!safeEqual(expected, xVerifyHeader)) {
     logger.warn("PhonePe callback signature mismatch");
     throw new AppError("Invalid signature", 400);
   }

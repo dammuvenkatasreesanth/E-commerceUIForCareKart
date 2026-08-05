@@ -8,18 +8,11 @@ export function getMe(): Promise<AuthUser> {
 export interface UpdateProfileInput {
   name?: string;
   email?: string;
+  phone?: string;
   accountType?: AccountType;
   gstin?: string;
 }
 
 export function updateProfile(input: UpdateProfileInput): Promise<AuthUser> {
   return api.patch("/users/me", input);
-}
-
-export function requestPhoneChangeOtp(newPhone: string): Promise<{ message: string }> {
-  return api.post("/users/me/phone/request-otp", { newPhone });
-}
-
-export function verifyPhoneChangeOtp(newPhone: string, code: string): Promise<AuthUser> {
-  return api.post("/users/me/phone/verify-otp", { newPhone, code });
 }

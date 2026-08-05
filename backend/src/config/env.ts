@@ -18,10 +18,15 @@ const envSchema = z.object({
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(6).default("ChangeMe123!"),
   BOOTSTRAP_ADMIN_NAME: z.string().default("CareKart Admin"),
 
-  SMS_PROVIDER: z.enum(["console", "msg91"]).default("console"),
-  MSG91_AUTH_KEY: z.string().optional().default(""),
-  MSG91_TEMPLATE_ID: z.string().optional().default(""),
-  MSG91_SENDER_ID: z.string().optional().default("CAREKT"),
+  GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  FACEBOOK_APP_ID: z.string().optional().default(""),
+  FACEBOOK_APP_SECRET: z.string().optional().default(""),
+
+  R2_ACCOUNT_ID: z.string().optional().default(""),
+  R2_ACCESS_KEY_ID: z.string().optional().default(""),
+  R2_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  R2_BUCKET_NAME: z.string().optional().default(""),
+  R2_PUBLIC_BASE_URL: z.string().optional().default(""),
 
   SMTP_HOST: z.string().optional().default(""),
   SMTP_PORT: z.coerce.number().default(587),
@@ -39,9 +44,6 @@ const envSchema = z.object({
   // here (GET) and calls back here (server-to-server POST) after payment.
   PUBLIC_API_BASE_URL: z.string().default("http://localhost:4000/api/v1"),
   FRONTEND_ORDER_CONFIRMATION_URL: z.string().default("http://localhost:5173/order-confirmation"),
-
-  UPLOAD_DIR: z.string().default("uploads"),
-  PUBLIC_UPLOAD_BASE_URL: z.string().default("http://localhost:4000/uploads"),
 
   STAFF_APP_URL: z.string().default("http://localhost:5173"),
 });

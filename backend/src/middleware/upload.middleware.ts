@@ -1,17 +1,4 @@
 import multer from "multer";
-import path from "node:path";
-import crypto from "node:crypto";
-import { ensureUploadSubdir } from "../providers/storage/local-storage";
-
-function makeStorage(subdir: string) {
-  return multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, ensureUploadSubdir(subdir)),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname);
-      cb(null, `${crypto.randomUUID()}${ext}`);
-    },
-  });
-}
 
 const imageFileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
   if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.mimetype)) {
@@ -21,33 +8,38 @@ const imageFileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
   cb(null, true);
 };
 
+const videoFileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
+  if (!/^video\/(mp4|webm|ogg|quicktime)$/.test(file.mimetype)) {
+    cb(new Error("Only video files are allowed"));
+    return;
+  }
+  cb(null, true);
+};
+
+// Buffered in memory rather than written to disk — the real content
+// validation (magic-number check) and the R2 upload both need the bytes,
+// and neither is a local filesystem operation anymore.
 export const uploadProductImage = multer({
-  storage: makeStorage("product-images"),
+  storage: multer.memoryStorage(),
   fileFilter: imageFileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 export const uploadBannerImage = multer({
-  storage: makeStorage("banners"),
+  storage: multer.memoryStorage(),
   fileFilter: imageFileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 export const uploadCategoryImage = multer({
-  storage: makeStorage("categories"),
+  storage: multer.memoryStorage(),
   fileFilter: imageFileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 export const uploadProductVideo = multer({
-  storage: makeStorage("product-videos"),
-  fileFilter: (_req, file, cb) => {
-    if (!/^video\/(mp4|webm|ogg|quicktime)$/.test(file.mimetype)) {
-      cb(new Error("Only video files are allowed"));
-      return;
-    }
-    cb(null, true);
-  },
+  storage: multer.memoryStorage(),
+  fileFilter: videoFileFilter,
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 

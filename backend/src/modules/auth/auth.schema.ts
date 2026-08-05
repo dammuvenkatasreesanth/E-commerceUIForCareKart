@@ -1,13 +1,40 @@
 import { z } from "zod";
-import { PHONE_REGEX } from "../../config/constants";
 
-export const otpRequestSchema = z.object({
-  phone: z.string().regex(PHONE_REGEX, "Enter a valid phone number"),
+export const customerSignupSchema = z.object({
+  name: z.string().min(1).max(120),
+  email: z.string().email(),
+  password: z.string().min(8),
 });
 
-export const otpVerifySchema = z.object({
-  phone: z.string().regex(PHONE_REGEX),
-  code: z.string().length(6),
+export const customerLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(10),
+  password: z.string().min(8),
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(10),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email(),
+});
+
+export const googleLoginSchema = z.object({
+  idToken: z.string().min(10),
+});
+
+export const facebookLoginSchema = z.object({
+  accessToken: z.string().min(10),
+  userId: z.string().min(1),
 });
 
 export const staffLoginSchema = z.object({

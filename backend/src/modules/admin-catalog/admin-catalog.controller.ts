@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import * as service from "./admin-catalog.service";
-import { publicUrlFor } from "../../providers/storage/local-storage";
+import { uploadToR2 } from "../../providers/storage/r2-storage";
+import { validateUploadedFile } from "../../lib/fileValidation";
 import { parseIdParam } from "../../lib/parseId";
 import { BadRequestError } from "../../lib/errors";
 import { writeAudit } from "../../middleware/audit.middleware";
@@ -36,7 +37,8 @@ export async function setPackTiers(req: Request, res: Response) {
 export async function addImage(req: Request, res: Response) {
   const id = parseIdParam(req.params.id);
   if (!req.file) throw new BadRequestError("No image file uploaded");
-  const url = publicUrlFor("product-images", req.file.filename);
+  const { ext, contentType } = await validateUploadedFile(req.file.buffer, req.file.mimetype, "image");
+  const url = await uploadToR2("product-images", req.file.buffer, ext, contentType);
   const image = await service.addProductImage(id, url);
   res.status(201).json(image);
 }
@@ -52,7 +54,9 @@ export async function removeImage(req: Request, res: Response) {
 // the product's videoUrl separately (mirrors the banner image upload flow).
 export async function uploadVideo(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError("No video file uploaded");
-  res.status(201).json({ url: publicUrlFor("product-videos", req.file.filename) });
+  const { ext, contentType } = await validateUploadedFile(req.file.buffer, req.file.mimetype, "video");
+  const url = await uploadToR2("product-videos", req.file.buffer, ext, contentType);
+  res.status(201).json({ url });
 }
 
 export async function listCategories(_req: Request, res: Response) {
@@ -74,7 +78,9 @@ export async function deleteCategory(req: Request, res: Response) {
 
 export async function uploadCategoryImage(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError("No image file uploaded");
-  res.status(201).json({ url: publicUrlFor("categories", req.file.filename) });
+  const { ext, contentType } = await validateUploadedFile(req.file.buffer, req.file.mimetype, "image");
+  const url = await uploadToR2("categories", req.file.buffer, ext, contentType);
+  res.status(201).json({ url });
 }
 
 export async function importCsv(req: Request, res: Response) {

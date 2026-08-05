@@ -1,5 +1,6 @@
-import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
+import axios from "axios";
+import { OAuth2Client } from "google-auth-library";
 import { prisma } from "../../lib/prisma";
 import {
   signAccessToken,
@@ -8,16 +9,14 @@ import {
   refreshTokenExpiry,
 } from "../../lib/jwt";
 import { BadRequestError, ConflictError, ForbiddenError, UnauthorizedError } from "../../lib/errors";
-import { smsProvider } from "../../providers/sms";
 import { sendMail } from "../../providers/email/mailer";
 import { passwordResetEmail, staffInviteEmail } from "../../providers/email/templates/staffAuth";
+import { verifyEmailEmail, customerPasswordResetEmail } from "../../providers/email/templates/customerAuth";
 import { env } from "../../config/env";
 import {
-  OTP_LENGTH,
-  OTP_MAX_ATTEMPTS,
-  OTP_TTL_MINUTES,
   PASSWORD_RESET_TTL_HOURS,
   STAFF_INVITE_TTL_HOURS,
+  EMAIL_VERIFICATION_TTL_HOURS,
 } from "../../config/constants";
 import type { Role, User } from "@prisma/client";
 
@@ -48,109 +47,176 @@ async function issueSession(userId: number, role: Role, meta: SessionMeta): Prom
   return { accessToken, refreshToken };
 }
 
-function generateOtpCode(): string {
-  const max = 10 ** OTP_LENGTH;
-  const code = crypto.randomInt(0, max);
-  return code.toString().padStart(OTP_LENGTH, "0");
-}
+// ── Customer: email + password ────────────────────────────────────────────
 
-// ── Customer: phone + OTP ─────────────────────────────────────────────────
-
-export async function requestCustomerOtp(phone: string): Promise<void> {
-  const code = generateOtpCode();
-  const codeHash = hashToken(code);
-
-  await prisma.otpRequest.create({
+export async function sendVerificationEmail(userId: number, email: string, name: string): Promise<void> {
+  const token = generateRefreshTokenValue();
+  await prisma.emailVerificationToken.create({
     data: {
-      phone,
-      purpose: "LOGIN",
-      codeHash,
-      expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000),
+      userId,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_HOURS * 60 * 60 * 1000),
     },
   });
 
-  await smsProvider.sendOtp(phone, code);
+  const verifyUrl = `${env.STAFF_APP_URL}/verify-email?token=${token}`;
+  const { subject, html } = verifyEmailEmail(name, verifyUrl);
+  await sendMail({ to: email, subject, html });
 }
 
-export async function verifyCustomerOtp(
-  phone: string,
-  code: string,
-  meta: SessionMeta,
-): Promise<TokenPair & { isNewUser: boolean; user: User }> {
-  const otpRequest = await prisma.otpRequest.findFirst({
-    where: { phone, purpose: "LOGIN", consumedAt: null },
-    orderBy: { createdAt: "desc" },
+export async function customerSignup(input: { name: string; email: string; password: string }): Promise<void> {
+  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  if (existing) throw new ConflictError("An account with this email already exists.");
+
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const user = await prisma.user.create({
+    data: { email: input.email, name: input.name, passwordHash, role: "CUSTOMER", status: "ACTIVE", emailVerified: false },
   });
 
-  if (!otpRequest) throw new BadRequestError("No OTP request found. Please request a new code.");
-  if (otpRequest.expiresAt < new Date()) throw new BadRequestError("OTP has expired. Please request a new code.");
-  if (otpRequest.attempts >= OTP_MAX_ATTEMPTS) {
-    throw new BadRequestError("Too many incorrect attempts. Please request a new code.");
-  }
+  await sendVerificationEmail(user.id, user.email!, user.name ?? "");
+}
 
-  if (otpRequest.codeHash !== hashToken(code)) {
-    await prisma.otpRequest.update({
-      where: { id: otpRequest.id },
-      data: { attempts: { increment: 1 } },
+export async function resendVerificationEmail(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || user.emailVerified) return; // don't leak existence; no-op if already verified
+  await sendVerificationEmail(user.id, email, user.name ?? "");
+}
+
+export async function verifyEmail(
+  token: string,
+  meta: SessionMeta,
+): Promise<TokenPair & { user: User; isNewUser: boolean }> {
+  const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (!record) throw new BadRequestError("Invalid or expired verification link.");
+  if (record.consumedAt) throw new BadRequestError("This verification link has already been used.");
+  if (record.expiresAt < new Date()) throw new BadRequestError("This verification link has expired.");
+
+  const user = await prisma.$transaction(async (tx) => {
+    await tx.emailVerificationToken.update({ where: { id: record.id }, data: { consumedAt: new Date() } });
+    return tx.user.update({
+      where: { id: record.userId },
+      data: { emailVerified: true, emailVerifiedAt: new Date(), lastLoginAt: new Date() },
     });
-    throw new BadRequestError("Incorrect OTP code.");
+  });
+
+  const tokens = await issueSession(user.id, user.role, meta);
+  return { ...tokens, user, isNewUser: true }; // verify-email is inherently the account's first session
+}
+
+export async function customerLogin(email: string, password: string, meta: SessionMeta): Promise<TokenPair & { user: User }> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
+  if (user.status === "BLOCKED" || user.status === "SUSPENDED") {
+    throw new ForbiddenError("This account has been blocked or suspended.");
   }
 
-  await prisma.otpRequest.update({ where: { id: otpRequest.id }, data: { consumedAt: new Date() } });
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) throw new UnauthorizedError("Invalid email or password.");
 
-  let user = await prisma.user.findUnique({ where: { phone } });
+  if (!user.emailVerified) {
+    throw new ForbiddenError("Please verify your email before logging in. Check your inbox for the verification link.");
+  }
+
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  const tokens = await issueSession(user.id, user.role, meta);
+  return { ...tokens, user };
+}
+
+// ── Customer: OAuth ─────────────────────────────────────────────────────
+
+interface OAuthProfile {
+  provider: "google" | "facebook";
+  providerId: string;
+  email: string;
+  name: string;
+}
+
+// Auto-links on a provider-verified email match (existing password account,
+// or an account already linked to the *other* OAuth provider). This is safe
+// because Google/Facebook only expose emails they've themselves verified —
+// a matching email is at least as strong a proof of ownership as our own
+// email-verification link. Callers must reject unverified provider emails
+// before reaching this function.
+async function linkOrCreateOAuthUser(profile: OAuthProfile, meta: SessionMeta): Promise<TokenPair & { user: User; isNewUser: boolean }> {
+  const idField = profile.provider === "google" ? "googleId" : "facebookId";
+
+  let user = await prisma.user.findUnique({ where: { [idField]: profile.providerId } as never });
   let isNewUser = false;
 
   if (!user) {
-    user = await prisma.user.create({ data: { phone, role: "CUSTOMER", status: "ACTIVE" } });
-    isNewUser = true;
-  } else if (user.status === "BLOCKED" || user.status === "SUSPENDED") {
+    const existingByEmail = await prisma.user.findUnique({ where: { email: profile.email } });
+    if (existingByEmail) {
+      user = await prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          [idField]: profile.providerId,
+          emailVerified: true,
+          emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(),
+        },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          email: profile.email,
+          name: profile.name,
+          role: "CUSTOMER",
+          status: "ACTIVE",
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          [idField]: profile.providerId,
+        },
+      });
+      isNewUser = true;
+    }
+  }
+
+  if (user.status === "BLOCKED" || user.status === "SUSPENDED") {
     throw new ForbiddenError("This account has been blocked or suspended.");
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-
   const tokens = await issueSession(user.id, user.role, meta);
-  return { ...tokens, isNewUser, user };
+  return { ...tokens, user, isNewUser };
 }
 
-export async function requestPhoneChangeOtp(userId: number, newPhone: string): Promise<void> {
-  const existing = await prisma.user.findUnique({ where: { phone: newPhone } });
-  if (existing && existing.id !== userId) {
-    throw new BadRequestError("This phone number is already in use.");
+export async function googleLogin(idToken: string, meta: SessionMeta): Promise<TokenPair & { user: User; isNewUser: boolean }> {
+  const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
+  const ticket = await googleClient.verifyIdToken({ idToken, audience: env.GOOGLE_CLIENT_ID });
+  const payload = ticket.getPayload();
+  if (!payload?.email || !payload.email_verified) {
+    throw new BadRequestError("Google account has no verified email.");
   }
-
-  const code = generateOtpCode();
-  await prisma.otpRequest.create({
-    data: {
-      phone: newPhone,
-      purpose: "PHONE_CHANGE",
-      codeHash: hashToken(code),
-      expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000),
-      userId,
-    },
-  });
-  await smsProvider.sendOtp(newPhone, code);
+  return linkOrCreateOAuthUser({ provider: "google", providerId: payload.sub, email: payload.email, name: payload.name ?? "" }, meta);
 }
 
-export async function verifyPhoneChangeOtp(userId: number, newPhone: string, code: string): Promise<User> {
-  const otpRequest = await prisma.otpRequest.findFirst({
-    where: { phone: newPhone, purpose: "PHONE_CHANGE", consumedAt: null, userId },
-    orderBy: { createdAt: "desc" },
+export async function facebookLogin(
+  accessToken: string,
+  userId: string,
+  meta: SessionMeta,
+): Promise<TokenPair & { user: User; isNewUser: boolean }> {
+  // Confirm the token was actually issued for our app (and for this user)
+  // before trusting anything from /me — otherwise a token minted for an
+  // unrelated Facebook app could be replayed against us.
+  const appToken = `${env.FACEBOOK_APP_ID}|${env.FACEBOOK_APP_SECRET}`;
+  const debug = await axios.get("https://graph.facebook.com/debug_token", {
+    params: { input_token: accessToken, access_token: appToken },
   });
-
-  if (!otpRequest) throw new BadRequestError("No OTP request found. Please request a new code.");
-  if (otpRequest.expiresAt < new Date()) throw new BadRequestError("OTP has expired. Please request a new code.");
-  if (otpRequest.attempts >= OTP_MAX_ATTEMPTS) {
-    throw new BadRequestError("Too many incorrect attempts. Please request a new code.");
-  }
-  if (otpRequest.codeHash !== hashToken(code)) {
-    await prisma.otpRequest.update({ where: { id: otpRequest.id }, data: { attempts: { increment: 1 } } });
-    throw new BadRequestError("Incorrect OTP code.");
+  const data = debug.data?.data;
+  if (!data?.is_valid || data.app_id !== env.FACEBOOK_APP_ID || data.user_id !== userId) {
+    throw new UnauthorizedError("Invalid Facebook session.");
   }
 
-  await prisma.otpRequest.update({ where: { id: otpRequest.id }, data: { consumedAt: new Date() } });
-  return prisma.user.update({ where: { id: userId }, data: { phone: newPhone } });
+  const profile = await axios.get("https://graph.facebook.com/me", {
+    params: { fields: "id,name,email", access_token: accessToken },
+  });
+  if (!profile.data?.email) {
+    throw new BadRequestError("Email permission is required to sign in with Facebook.");
+  }
+
+  return linkOrCreateOAuthUser(
+    { provider: "facebook", providerId: profile.data.id, email: profile.data.email, name: profile.data.name ?? "" },
+    meta,
+  );
 }
 
 // ── Staff: email + password ────────────────────────────────────────────
@@ -223,7 +289,12 @@ export async function createStaffInvite(
   return user;
 }
 
-export async function staffForgotPassword(email: string): Promise<void> {
+// ── Shared password reset (staff + customer) ────────────────────────────
+
+// env.STAFF_APP_URL is really just "the frontend's base origin" despite the
+// name — the frontend is one SPA serving both customer and staff routes —
+// so it's reused as-is for customer links too, no separate env var needed.
+export async function forgotPassword(email: string, resetPathPrefix: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.passwordHash) return; // don't leak whether the email exists
 
@@ -236,12 +307,14 @@ export async function staffForgotPassword(email: string): Promise<void> {
     },
   });
 
-  const resetUrl = `${process.env.STAFF_APP_URL ?? "http://localhost:5173"}/staff/reset-password?token=${token}`;
-  const { subject, html } = passwordResetEmail(user.name ?? "", resetUrl);
+  const resetUrl = `${env.STAFF_APP_URL}${resetPathPrefix}?token=${token}`;
+  const { subject, html } = resetPathPrefix.startsWith("/staff")
+    ? passwordResetEmail(user.name ?? "", resetUrl)
+    : customerPasswordResetEmail(user.name ?? "", resetUrl);
   await sendMail({ to: email, subject, html });
 }
 
-export async function staffResetPassword(token: string, password: string): Promise<void> {
+export async function resetPassword(token: string, password: string): Promise<void> {
   const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!resetToken) throw new BadRequestError("Invalid or expired reset link.");
   if (resetToken.consumedAt) throw new BadRequestError("This reset link has already been used.");

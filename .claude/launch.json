@@ -27,6 +27,21 @@
         "--strictPort"
       ],
       "port": 5175
+    },
+    {
+      "name": "vasu-portfolio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/dammu/OneDrive/Desktop/web/vasu-portfolio",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "8844",
+        "--strictPort"
+      ],
+      "port": 8844
     }
   ]
 }

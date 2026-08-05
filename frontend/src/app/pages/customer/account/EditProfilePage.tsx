@@ -11,6 +11,7 @@ export function EditProfilePage() {
   const updateProfile = useUpdateProfile();
   const [editName, setEditName] = useState(user?.name ?? "");
   const [editEmail, setEditEmail] = useState(user?.email ?? "");
+  const [editPhone, setEditPhone] = useState(user?.phone ?? "");
   const [editSaved, setEditSaved] = useState(false);
 
   if (!user) return null;
@@ -18,7 +19,7 @@ export function EditProfilePage() {
   const handleSaveProfile = () => {
     if (!editName.trim()) return;
     updateProfile.mutate(
-      { name: editName.trim(), email: editEmail.trim() },
+      { name: editName.trim(), email: editEmail.trim(), phone: editPhone.trim() },
       {
         onSuccess: () => {
           toast.success("Profile updated");
@@ -50,11 +51,8 @@ export function EditProfilePage() {
           <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="you@example.com" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Mobile Number</label>
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-muted rounded-xl opacity-60">
-            <span className="text-sm">🇮🇳 {user.phone}</span>
-            <span className="ml-auto text-[10px] text-muted-foreground">Cannot be changed</span>
-          </div>
+          <label className="block text-xs font-semibold mb-1">Mobile Number <span className="text-muted-foreground font-normal">(optional)</span></label>
+          <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="9876543210" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
         </div>
         <button onClick={handleSaveProfile} disabled={!editName.trim() || updateProfile.isPending} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center justify-center gap-2">
           {editSaved ? <><Check className="w-4 h-4" />Saved!</> : updateProfile.isPending ? "Saving..." : "Save Changes"}

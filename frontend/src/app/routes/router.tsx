@@ -12,6 +12,10 @@ import { CartPage } from "../pages/customer/CartPage";
 import { CheckoutPage } from "../pages/customer/CheckoutPage";
 import { OrderConfirmationPage } from "../pages/customer/OrderConfirmationPage";
 import { LoginPage } from "../pages/customer/LoginPage";
+import { SignupPage } from "../pages/customer/SignupPage";
+import { VerifyEmailPage } from "../pages/customer/VerifyEmailPage";
+import { ForgotPasswordPage } from "../pages/customer/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/customer/ResetPasswordPage";
 import { CompleteProfilePage } from "../pages/customer/CompleteProfilePage";
 import { AccountHomePage } from "../pages/customer/account/AccountHomePage";
 import { OrdersListPage } from "../pages/customer/account/OrdersListPage";
@@ -57,9 +61,15 @@ export const router = createBrowserRouter([
       { path: "/cart", element: <CartPage /> },
       { path: "/checkout", element: <CheckoutPage /> },
       { path: "/order-confirmation", element: <OrderConfirmationPage /> },
+      { path: "/verify-email", element: <VerifyEmailPage /> },
       {
         element: <RedirectIfAuthenticated />,
-        children: [{ path: "/login", element: <LoginPage /> }],
+        children: [
+          { path: "/login", element: <LoginPage /> },
+          { path: "/signup", element: <SignupPage /> },
+          { path: "/forgot-password", element: <ForgotPasswordPage /> },
+          { path: "/reset-password", element: <ResetPasswordPage /> },
+        ],
       },
       {
         element: <RequireCustomerAuth />,

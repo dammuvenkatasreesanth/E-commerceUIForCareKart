@@ -2,10 +2,21 @@ import { Router } from "express";
 import { asyncHandler } from "../../lib/asyncHandler";
 import { validate } from "../../middleware/validate.middleware";
 import { authenticate } from "../../middleware/auth.middleware";
-import { otpRequestLimiter, otpVerifyLimiter, staffLoginLimiter, staffForgotPasswordLimiter } from "../../middleware/rateLimit.middleware";
 import {
-  otpRequestSchema,
-  otpVerifySchema,
+  authSignupLimiter,
+  customerLoginLimiter,
+  staffLoginLimiter,
+  staffForgotPasswordLimiter,
+} from "../../middleware/rateLimit.middleware";
+import {
+  customerSignupSchema,
+  customerLoginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
+  googleLoginSchema,
+  facebookLoginSchema,
   staffLoginSchema,
   staffAcceptInviteSchema,
   staffForgotPasswordSchema,
@@ -15,9 +26,17 @@ import * as controller from "./auth.controller";
 
 export const authRouter = Router();
 
-// Customer: phone + OTP
-authRouter.post("/otp/request", otpRequestLimiter, validate({ body: otpRequestSchema }), asyncHandler(controller.requestOtp));
-authRouter.post("/otp/verify", otpVerifyLimiter, validate({ body: otpVerifySchema }), asyncHandler(controller.verifyOtp));
+// Customer: email + password
+authRouter.post("/signup", authSignupLimiter, validate({ body: customerSignupSchema }), asyncHandler(controller.customerSignupHandler));
+authRouter.post("/login", customerLoginLimiter, validate({ body: customerLoginSchema }), asyncHandler(controller.customerLoginHandler));
+authRouter.post("/verify-email", validate({ body: verifyEmailSchema }), asyncHandler(controller.verifyEmailHandler));
+authRouter.post("/resend-verification", authSignupLimiter, validate({ body: resendVerificationSchema }), asyncHandler(controller.resendVerificationHandler));
+authRouter.post("/forgot-password", staffForgotPasswordLimiter, validate({ body: forgotPasswordSchema }), asyncHandler(controller.forgotPasswordHandler));
+authRouter.post("/reset-password", validate({ body: resetPasswordSchema }), asyncHandler(controller.resetPasswordHandler));
+
+// Customer: OAuth
+authRouter.post("/google", validate({ body: googleLoginSchema }), asyncHandler(controller.googleLoginHandler));
+authRouter.post("/facebook", validate({ body: facebookLoginSchema }), asyncHandler(controller.facebookLoginHandler));
 
 // Staff: email + password
 authRouter.post("/staff/login", staffLoginLimiter, validate({ body: staffLoginSchema }), asyncHandler(controller.staffLoginHandler));

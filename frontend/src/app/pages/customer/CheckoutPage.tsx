@@ -1,20 +1,17 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, MapPin, CreditCard, Zap, Building2, IndianRupee, Plus, ArrowLeft, Loader2 } from "lucide-react";
+import { Check, MapPin, CreditCard, Zap, Building2, IndianRupee, Plus, Mail } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../hooks/useCart";
 import { useAddresses, useCreateAddress } from "../../hooks/useAddresses";
 import { usePlaceOrder } from "../../hooks/useOrders";
-import { requestOtp, verifyOtp as verifyOtpApi } from "../../lib/api/endpoints/auth";
-import { updateProfile } from "../../lib/api/endpoints/users";
-import { addCartItem } from "../../lib/api/endpoints/cart";
+import { useAuthenticateAndMergeCart } from "../../hooks/useAuthenticateAndMergeCart";
+import { OAuthButtons } from "../../components/common/OAuthButtons";
+import { customerLogin, customerSignup, resendVerification } from "../../lib/api/endpoints/auth";
 import { initiatePayment } from "../../lib/api/endpoints/payments";
-import { setAccessToken } from "../../lib/api/tokenStore";
-import { getLocalCart, clearLocalCart } from "../../lib/localCart";
-import type { AuthUser } from "../../types/user";
+import { setPostVerifyRedirect } from "../../lib/postVerifyRedirect";
 import type { PaymentMethod } from "../../types/order";
 
 function errorMessage(err: unknown): string {
@@ -33,238 +30,161 @@ export function CheckoutPage() {
   return <CheckoutWizard />;
 }
 
-// ─── Auth gate: guests must verify their phone before an order can be placed
-// (so every order stays trackable) — the cart itself was already built without
-// an account. Verifying here merges the local cart into the real server cart
-// and only then flips AuthContext, so CheckoutWizard mounts with the merge
-// already complete instead of racing it.
+// ─── Auth gate: guests must sign in before an order can be placed (so every
+// order stays trackable) — the cart itself was already built without an
+// account. Authenticating here merges the local cart into the real server
+// cart via the same shared hook LoginPage uses, and only then flips
+// AuthContext, so CheckoutWizard mounts with the merge already complete.
 function CheckoutAuthGate() {
-  const { loginCustomer } = useAuth();
-  const queryClient = useQueryClient();
+  const authenticateAndMergeCart = useAuthenticateAndMergeCart();
 
-  const [step, setStep] = useState<"phone" | "otp" | "name" | "merging">("phone");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [timer, setTimer] = useState(0);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
-  const [isSavingName, setIsSavingName] = useState(false);
-  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const pendingSession = useRef<{ accessToken: string; user: AuthUser } | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [signupSent, setSignupSent] = useState(false);
 
-  useEffect(() => {
-    if (timer > 0) {
-      const t = setTimeout(() => setTimer((v) => v - 1), 1000);
-      return () => clearTimeout(t);
-    }
-  }, [timer]);
-
-  const sendOtp = async () => {
-    if (phone.length !== 10 || isSendingOtp) return;
-    setIsSendingOtp(true);
+  const handleLogin = async () => {
+    if (!email.trim() || !password || isSubmitting) return;
+    setIsSubmitting(true);
     try {
-      await requestOtp(`+91${phone}`);
-      setStep("otp");
-      setOtp(["", "", "", "", "", ""]);
-      setTimer(30);
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      const result = await customerLogin(email.trim(), password);
+      await authenticateAndMergeCart(result.accessToken, result.user);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
-      setIsSendingOtp(false);
+      setIsSubmitting(false);
     }
   };
 
-  const resendOtp = async () => {
-    if (isSendingOtp) return;
-    setIsSendingOtp(true);
+  const handleSignup = async () => {
+    if (!name.trim() || !email.trim() || isSubmitting) return;
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast.error("Passwords don't match");
+      return;
+    }
+    setIsSubmitting(true);
     try {
-      await requestOtp(`+91${phone}`);
-      setOtp(["", "", "", "", "", ""]);
-      setTimer(30);
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      await customerSignup(name.trim(), email.trim(), password);
+      // The emailed verification link is a fresh page load, not client-side
+      // navigation, so this can't ride location.state — VerifyEmailPage reads
+      // it back out of storage after it verifies.
+      setPostVerifyRedirect("/checkout");
+      setSignupSent(true);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
-      setIsSendingOtp(false);
+      setIsSubmitting(false);
     }
   };
 
-  const finishLogin = async (accessToken: string, user: AuthUser) => {
-    setStep("merging");
-    const localItems = getLocalCart();
-    const skipped: string[] = [];
-    for (const item of localItems) {
-      try {
-        await addCartItem({ productId: item.productId, sizeLabel: item.sizeLabel, tierIndex: item.tierIndex, quantity: item.quantity });
-      } catch {
-        skipped.push(item.name);
-      }
-    }
-    clearLocalCart();
-    await queryClient.invalidateQueries({ queryKey: ["cart"] });
-    if (skipped.length > 0) {
-      toast.warning(`Some items couldn't be added to your cart: ${skipped.join(", ")}`);
-    }
-    loginCustomer(accessToken, user);
-  };
-
-  const verifyOtp = async () => {
-    const code = otp.join("");
-    if (code.length !== 6 || isVerifying) return;
-    setIsVerifying(true);
+  const handleResend = async () => {
+    if (isResending) return;
+    setIsResending(true);
     try {
-      const result = await verifyOtpApi(`+91${phone}`, code);
-      // Token must be live before any authenticated call below, but we hold off
-      // on loginCustomer() (which flips AuthContext) until the merge finishes.
-      setAccessToken(result.accessToken, "customer");
-      if (result.isNewUser) {
-        pendingSession.current = { accessToken: result.accessToken, user: result.user };
-        setStep("name");
-      } else {
-        await finishLogin(result.accessToken, result.user);
-      }
-    } catch (err) {
-      toast.error(errorMessage(err));
-      setOtp(["", "", "", "", "", ""]);
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  const submitName = async () => {
-    if (!name.trim() || isSavingName || !pendingSession.current) return;
-    setIsSavingName(true);
-    try {
-      const updatedUser = await updateProfile({ name: name.trim(), accountType: "RETAIL" });
-      await finishLogin(pendingSession.current.accessToken, updatedUser);
+      await resendVerification(email.trim());
+      toast.success("Verification email sent again.");
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
-      setIsSavingName(false);
+      setIsResending(false);
     }
   };
 
-  const handleOtpChange = (i: number, val: string) => {
-    if (!/^\d?$/.test(val)) return;
-    const next = [...otp];
-    next[i] = val;
-    setOtp(next);
-    if (val && i < 5) otpRefs.current[i + 1]?.focus();
-    if (next.every((d) => d !== "") && next.join("").length === 6) setTimeout(verifyOtp, 300);
-  };
-
-  const handleOtpKey = (i: number, e: KeyboardEvent) => {
-    if (e.key === "Backspace" && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus();
-  };
+  if (signupSent) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-10 pb-24 md:pb-10">
+        <div className="bg-white border border-border rounded-2xl p-6 text-center">
+          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Mail className="w-6 h-6 text-primary" />
+          </div>
+          <h1 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] mb-2">Check your email</h1>
+          <p className="text-sm text-muted-foreground mb-6">
+            We sent a verification link to <span className="font-semibold text-foreground">{email}</span>. Click it to activate your account and come back here to finish your order.
+          </p>
+          <button onClick={handleResend} disabled={isResending} className="text-xs text-primary font-semibold hover:underline disabled:opacity-50">
+            {isResending ? "Resending…" : "Didn't get it? Resend email"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto px-4 py-10 pb-24 md:pb-10">
       <div className="bg-white border border-border rounded-2xl p-6">
         <h1 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] mb-1">
-          {step === "merging" ? "Setting up your account…" : "Sign in to place your order"}
+          {mode === "login" ? "Sign in to place your order" : "Create an account to place your order"}
         </h1>
-        <p className="text-sm text-muted-foreground mb-6">
-          {step === "merging"
-            ? "Hang tight, we're saving your cart."
-            : "Your cart is saved. Verify your mobile number so you can track this order anytime."}
-        </p>
+        <p className="text-sm text-muted-foreground mb-6">Your cart is saved — sign in or sign up to continue.</p>
 
-        {step === "phone" && (
-          <div className="space-y-4">
+        <div className="space-y-4">
+          {mode === "signup" && (
             <div>
-              <label className="block text-xs font-semibold mb-1.5">Mobile Number</label>
-              <div className="flex gap-2">
-                <div className="flex items-center gap-1.5 px-3 py-2.5 bg-muted rounded-xl border border-border text-sm font-semibold text-muted-foreground flex-shrink-0">
-                  <span>🇮🇳</span>
-                  <span>+91</span>
-                </div>
-                <input
-                  type="tel"
-                  maxLength={10}
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                  onKeyDown={(e) => e.key === "Enter" && sendOtp()}
-                  placeholder="98765 43210"
-                  className="flex-1 px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
-                  autoFocus
-                />
-              </div>
+              <label className="block text-xs font-semibold mb-1.5">Full Name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" autoFocus />
             </div>
-            <button onClick={sendOtp} disabled={phone.length !== 10 || isSendingOtp} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors">
-              {isSendingOtp ? "Sending…" : "Send OTP"}
-            </button>
-          </div>
-        )}
-
-        {step === "otp" && (
+          )}
           <div>
-            <button onClick={() => setStep("phone")} className="flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground transition-colors">
-              <ArrowLeft className="w-4 h-4" />
-              Change number
-            </button>
-            <p className="text-sm text-muted-foreground mb-4">
-              Sent to <span className="font-semibold text-foreground">+91 {phone}</span>
-            </p>
-            <div className="flex gap-2 justify-between mb-5">
-              {otp.map((d, i) => (
-                <input
-                  key={i}
-                  ref={(el) => {
-                    otpRefs.current[i] = el;
-                  }}
-                  type="tel"
-                  maxLength={1}
-                  value={d}
-                  disabled={isVerifying}
-                  onChange={(e) => handleOtpChange(i, e.target.value)}
-                  onKeyDown={(e) => handleOtpKey(i, e)}
-                  className="w-11 h-13 text-center text-lg font-bold bg-muted rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors aspect-square disabled:opacity-60"
-                />
-              ))}
-            </div>
-            <button onClick={verifyOtp} disabled={isVerifying || otp.join("").length !== 6} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors">
-              {isVerifying ? "Verifying…" : "Verify & Continue"}
-            </button>
-            <div className="text-center mt-4">
-              {timer > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Resend OTP in <span className="font-bold text-foreground">{timer}s</span>
-                </p>
-              ) : (
-                <button onClick={resendOtp} disabled={isSendingOtp} className="text-xs text-primary font-semibold hover:underline disabled:opacity-50">
-                  {isSendingOtp ? "Resending…" : "Resend OTP"}
-                </button>
-              )}
-            </div>
+            <label className="block text-xs font-semibold mb-1.5">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" autoFocus={mode === "login"} />
           </div>
-        )}
-
-        {step === "name" && (
           <div>
-            <label className="block text-xs font-semibold mb-1">
-              Full Name <span className="text-destructive">*</span>
-            </label>
+            <label className="block text-xs font-semibold mb-1.5">Password</label>
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your full name"
-              className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm mb-4"
-              autoFocus
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && mode === "login" && handleLogin()}
+              placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
+              className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
             />
-            <button onClick={submitName} disabled={!name.trim() || isSavingName} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors">
-              {isSavingName ? "Saving…" : "Continue"}
-            </button>
           </div>
-        )}
+          {mode === "signup" && (
+            <div>
+              <label className="block text-xs font-semibold mb-1.5">Confirm Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSignup()}
+                placeholder="Re-enter password"
+                className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+              />
+            </div>
+          )}
 
-        {step === "merging" && (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="w-6 h-6 text-primary animate-spin" />
-          </div>
-        )}
+          <button
+            onClick={mode === "login" ? handleLogin : handleSignup}
+            disabled={isSubmitting || !email.trim() || !password || (mode === "signup" && !name.trim())}
+            className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors"
+          >
+            {isSubmitting ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-[11px] text-muted-foreground font-medium">OR</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        <OAuthButtons onAuthenticated={() => { /* AuthContext flip triggers CheckoutWizard to mount */ }} />
+
+        <p className="text-center text-sm text-muted-foreground mt-6">
+          {mode === "login" ? (
+            <>Don't have an account? <button onClick={() => setMode("signup")} className="text-primary font-semibold hover:underline">Sign up</button></>
+          ) : (
+            <>Already have an account? <button onClick={() => setMode("login")} className="text-primary font-semibold hover:underline">Sign in</button></>
+          )}
+        </p>
       </div>
     </div>
   );

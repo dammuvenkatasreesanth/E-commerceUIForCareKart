@@ -34,11 +34,6 @@ enum GstStatus {
   REJECTED
 }
 
-enum OtpPurpose {
-  LOGIN
-  PHONE_CHANGE
-}
-
 enum OrderStatus {
   PENDING
   CONFIRMED
@@ -136,24 +131,28 @@ enum ReviewStatus {
 // ── Identity ─────────────────────────────────────────────────────────────
 
 model User {
-  id          Int         @id @default(autoincrement())
-  phone       String?     @unique
-  email       String?     @unique
-  passwordHash String?
-  role        Role        @default(CUSTOMER)
-  status      UserStatus  @default(ACTIVE)
-  name        String?
-  accountType AccountType @default(RETAIL)
-  gstin       String?
-  gstStatus   GstStatus   @default(NONE)
-  claimedAt   DateTime?
-  lastLoginAt DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id              Int         @id @default(autoincrement())
+  phone           String?
+  email           String?     @unique
+  passwordHash    String?
+  emailVerified   Boolean     @default(false)
+  emailVerifiedAt DateTime?
+  googleId        String?     @unique
+  facebookId      String?     @unique
+  role            Role        @default(CUSTOMER)
+  status          UserStatus  @default(ACTIVE)
+  name            String?
+  accountType     AccountType @default(RETAIL)
+  gstin           String?
+  gstStatus       GstStatus   @default(NONE)
+  claimedAt       DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   addresses          Address[]
   refreshTokens      RefreshToken[]
-  otpRequests        OtpRequest[]
+  emailVerifications EmailVerificationToken[]
   passwordResets     PasswordResetToken[]
   staffInvitesIssued StaffInvite[]        @relation("StaffInviteIssuedBy")
   cartItems          CartItem[]
@@ -173,20 +172,17 @@ model User {
   @@index([role])
 }
 
-model OtpRequest {
-  id         Int        @id @default(autoincrement())
-  phone      String
-  purpose    OtpPurpose
-  codeHash   String
-  attempts   Int        @default(0)
+model EmailVerificationToken {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  tokenHash  String    @unique
   expiresAt  DateTime
   consumedAt DateTime?
-  userId     Int?
-  createdAt  DateTime   @default(now())
+  createdAt  DateTime  @default(now())
 
-  user User? @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
-  @@index([phone, purpose])
+  @@index([userId])
 }
 
 model StaffInvite {

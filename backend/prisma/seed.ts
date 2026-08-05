@@ -265,6 +265,13 @@ async function seedAdmin() {
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? "ChangeMe123!";
   const name = process.env.BOOTSTRAP_ADMIN_NAME ?? "CareKart Admin";
 
+  if (process.env.NODE_ENV === "production" && password === "ChangeMe123!") {
+    console.error(
+      "Refusing to seed: BOOTSTRAP_ADMIN_PASSWORD is still the default value in production. Set a real password before seeding.",
+    );
+    process.exit(1);
+  }
+
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     console.log(`Bootstrap admin already exists: ${email}`);

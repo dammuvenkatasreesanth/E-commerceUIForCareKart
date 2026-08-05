@@ -37,13 +37,21 @@ function serializeUser(user: { id: number; role: string; name: string | null; ph
   };
 }
 
-export async function requestOtp(req: Request, res: Response) {
-  await authService.requestCustomerOtp(req.body.phone);
-  res.status(200).json({ message: "OTP sent." });
+// ── Customer: email + password ──────────────────────────────────────────
+
+export async function customerSignupHandler(req: Request, res: Response) {
+  await authService.customerSignup(req.body);
+  res.status(201).json({ message: "Account created. Please check your email to verify your address before logging in." });
 }
 
-export async function verifyOtp(req: Request, res: Response) {
-  const result = await authService.verifyCustomerOtp(req.body.phone, req.body.code, sessionMeta(req));
+export async function customerLoginHandler(req: Request, res: Response) {
+  const result = await authService.customerLogin(req.body.email, req.body.password, sessionMeta(req));
+  setRefreshCookie(res, result.refreshToken);
+  res.status(200).json({ accessToken: result.accessToken, user: serializeUser(result.user) });
+}
+
+export async function verifyEmailHandler(req: Request, res: Response) {
+  const result = await authService.verifyEmail(req.body.token, sessionMeta(req));
   setRefreshCookie(res, result.refreshToken);
   res.status(200).json({
     accessToken: result.accessToken,
@@ -51,6 +59,45 @@ export async function verifyOtp(req: Request, res: Response) {
     user: serializeUser(result.user),
   });
 }
+
+export async function resendVerificationHandler(req: Request, res: Response) {
+  await authService.resendVerificationEmail(req.body.email);
+  res.status(200).json({ message: "If that email exists and isn't verified yet, a new link has been sent." });
+}
+
+export async function forgotPasswordHandler(req: Request, res: Response) {
+  await authService.forgotPassword(req.body.email, "/reset-password");
+  res.status(200).json({ message: "If that email exists, a reset link has been sent." });
+}
+
+export async function resetPasswordHandler(req: Request, res: Response) {
+  await authService.resetPassword(req.body.token, req.body.password);
+  res.status(200).json({ message: "Password updated. You can now log in." });
+}
+
+// ── Customer: OAuth ──────────────────────────────────────────────────────
+
+export async function googleLoginHandler(req: Request, res: Response) {
+  const result = await authService.googleLogin(req.body.idToken, sessionMeta(req));
+  setRefreshCookie(res, result.refreshToken);
+  res.status(200).json({
+    accessToken: result.accessToken,
+    isNewUser: result.isNewUser,
+    user: serializeUser(result.user),
+  });
+}
+
+export async function facebookLoginHandler(req: Request, res: Response) {
+  const result = await authService.facebookLogin(req.body.accessToken, req.body.userId, sessionMeta(req));
+  setRefreshCookie(res, result.refreshToken);
+  res.status(200).json({
+    accessToken: result.accessToken,
+    isNewUser: result.isNewUser,
+    user: serializeUser(result.user),
+  });
+}
+
+// ── Shared session management ────────────────────────────────────────────
 
 export async function refresh(req: Request, res: Response) {
   const cookieToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
@@ -77,6 +124,8 @@ export async function logoutAllHandler(req: Request, res: Response) {
   res.status(204).send();
 }
 
+// ── Staff: email + password ──────────────────────────────────────────────
+
 export async function staffLoginHandler(req: Request, res: Response) {
   const result = await authService.staffLogin(req.body.email, req.body.password, sessionMeta(req));
   setRefreshCookie(res, result.refreshToken);
@@ -96,11 +145,11 @@ export async function staffAcceptInviteHandler(req: Request, res: Response) {
 }
 
 export async function staffForgotPasswordHandler(req: Request, res: Response) {
-  await authService.staffForgotPassword(req.body.email);
+  await authService.forgotPassword(req.body.email, "/staff/reset-password");
   res.status(200).json({ message: "If that email exists, a reset link has been sent." });
 }
 
 export async function staffResetPasswordHandler(req: Request, res: Response) {
-  await authService.staffResetPassword(req.body.token, req.body.password);
+  await authService.resetPassword(req.body.token, req.body.password);
   res.status(200).json({ message: "Password updated. You can now log in." });
 }

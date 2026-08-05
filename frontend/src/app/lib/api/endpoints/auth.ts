@@ -6,12 +6,36 @@ interface AuthResponse {
   user: AuthUser;
 }
 
-export function requestOtp(phone: string): Promise<{ message: string }> {
-  return api.post("/auth/otp/request", { phone });
+export function customerSignup(name: string, email: string, password: string): Promise<{ message: string }> {
+  return api.post("/auth/signup", { name, email, password });
 }
 
-export function verifyOtp(phone: string, code: string): Promise<AuthResponse & { isNewUser: boolean }> {
-  return api.post("/auth/otp/verify", { phone, code });
+export function customerLogin(email: string, password: string): Promise<AuthResponse> {
+  return api.post("/auth/login", { email, password });
+}
+
+export function verifyEmail(token: string): Promise<AuthResponse & { isNewUser: boolean }> {
+  return api.post("/auth/verify-email", { token });
+}
+
+export function resendVerification(email: string): Promise<{ message: string }> {
+  return api.post("/auth/resend-verification", { email });
+}
+
+export function forgotPassword(email: string): Promise<{ message: string }> {
+  return api.post("/auth/forgot-password", { email });
+}
+
+export function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  return api.post("/auth/reset-password", { token, password });
+}
+
+export function googleLogin(idToken: string): Promise<AuthResponse & { isNewUser: boolean }> {
+  return api.post("/auth/google", { idToken });
+}
+
+export function facebookLogin(accessToken: string, userId: string): Promise<AuthResponse & { isNewUser: boolean }> {
+  return api.post("/auth/facebook", { accessToken, userId });
 }
 
 export function staffLogin(email: string, password: string): Promise<AuthResponse> {

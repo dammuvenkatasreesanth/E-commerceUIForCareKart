@@ -5,7 +5,6 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import { env } from "./config/env";
 import { logger } from "./lib/logger";
-import { uploadRoot } from "./providers/storage/local-storage";
 import { apiRouter } from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware";
 import { globalApiLimiter } from "./middleware/rateLimit.middleware";
@@ -27,7 +26,6 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(pinoHttp({ logger }));
 
-  app.use("/uploads", express.static(uploadRoot));
   app.use(env.API_BASE_PATH, globalApiLimiter, apiRouter);
 
   app.use(notFoundHandler);

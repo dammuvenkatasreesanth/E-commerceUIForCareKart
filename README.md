@@ -31,10 +31,11 @@ Edit `backend/.env`:
 - `DATABASE_URL` — point at your local MySQL (`mysql://user:pass@localhost:3306/carekart`)
 - `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` — generate real values, e.g.
   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` (run twice)
-- Everything else has a working default for local dev — SMS falls back to logging
-  OTPs to the console (`SMS_PROVIDER=console`), email falls back to logging instead
-  of sending, and product images/videos are stored on local disk. Fill in
-  `MSG91_*`, `SMTP_*`, and `PHONEPE_*` only when you have real credentials for them.
+- Everything else has a working default for local dev — email falls back to
+  logging instead of sending. Fill in `GOOGLE_CLIENT_ID`/`FACEBOOK_APP_*` (for
+  customer OAuth sign-in), `R2_*` (for product image/video storage — required
+  before any upload endpoint will work), `SMTP_*`, and `PHONEPE_*` only when
+  you have real credentials for them.
 
 Create the database schema and seed starter data:
 
@@ -102,7 +103,7 @@ cd frontend && npm run build                 # outputs static files to dist/
 ```
 
 See [backend/DEPLOY.md](backend/DEPLOY.md) for the full production deploy checklist
-(env vars, migrations, uploads persistence).
+(env vars, migrations, R2 setup).
 
 ## Useful scripts
 
