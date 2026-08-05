@@ -1,17 +1,17 @@
 -- DropForeignKey
-ALTER TABLE `otprequest` DROP FOREIGN KEY `OtpRequest_userId_fkey`;
+ALTER TABLE `OtpRequest` DROP FOREIGN KEY `OtpRequest_userId_fkey`;
 
 -- DropIndex
-DROP INDEX `User_phone_key` ON `user`;
+DROP INDEX `User_phone_key` ON `User`;
 
 -- AlterTable
-ALTER TABLE `user` ADD COLUMN `emailVerified` BOOLEAN NOT NULL DEFAULT false,
+ALTER TABLE `User` ADD COLUMN `emailVerified` BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN `emailVerifiedAt` DATETIME(3) NULL,
     ADD COLUMN `facebookId` VARCHAR(191) NULL,
     ADD COLUMN `googleId` VARCHAR(191) NULL;
 
 -- DropTable
-DROP TABLE `otprequest`;
+DROP TABLE `OtpRequest`;
 
 -- CreateTable
 CREATE TABLE `EmailVerificationToken` (

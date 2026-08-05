@@ -1,3 +1,3 @@
 -- AlterTable
-ALTER TABLE `product` DROP COLUMN `lowStockThreshold`;
+ALTER TABLE `Product` DROP COLUMN `lowStockThreshold`;
 

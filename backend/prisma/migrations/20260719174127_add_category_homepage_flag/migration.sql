@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE `category` ADD COLUMN `showOnHomepage` BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE `Category` ADD COLUMN `showOnHomepage` BOOLEAN NOT NULL DEFAULT false;
