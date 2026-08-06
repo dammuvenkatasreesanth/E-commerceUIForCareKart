@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router";
 import { BadgeCheck, Building2, ChevronRight, Edit2, Eye, Heart, LogOut, MapPin, Package } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
+import { UserAvatar } from "../../../components/common/UserAvatar";
 import { useAuth } from "../../../context/AuthContext";
 import { useOrders } from "../../../hooks/useOrders";
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from "../../../lib/orderStatus";
@@ -33,9 +34,11 @@ export function AccountHomePage() {
       {/* Profile hero card */}
       <div className="bg-primary rounded-2xl p-5 text-white mb-5">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-2xl font-extrabold flex-shrink-0">
-            {user.name?.[0]?.toUpperCase() ?? "?"}
-          </div>
+          <UserAvatar
+            avatarUrl={user.avatarUrl}
+            name={user.name}
+            className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-2xl font-extrabold flex-shrink-0"
+          />
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] truncate">{user.name}</h1>
             <p className="text-sm text-blue-200">{user.phone}</p>

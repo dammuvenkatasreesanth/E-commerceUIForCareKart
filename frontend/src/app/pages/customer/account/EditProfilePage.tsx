@@ -4,6 +4,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../../../context/AuthContext";
 import { useUpdateProfile } from "../../../hooks/useProfile";
+import { UserAvatar } from "../../../components/common/UserAvatar";
 
 export function EditProfilePage() {
   const navigate = useNavigate();
@@ -38,9 +39,11 @@ export function EditProfilePage() {
       <div className="bg-white border border-border rounded-2xl p-5 space-y-4">
         {/* Avatar */}
         <div className="flex justify-center mb-2">
-          <div className="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center text-4xl font-extrabold text-white">
-            {(editName[0] || user.name?.[0])?.toUpperCase()}
-          </div>
+          <UserAvatar
+            avatarUrl={user.avatarUrl}
+            name={editName || user.name}
+            className="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center text-4xl font-extrabold text-white"
+          />
         </div>
         <div>
           <label className="block text-xs font-semibold mb-1">Full Name <span className="text-destructive">*</span></label>

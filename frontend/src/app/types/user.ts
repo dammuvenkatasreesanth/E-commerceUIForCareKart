@@ -11,6 +11,7 @@ export interface AuthUser {
   accountType: AccountType;
   gstin: string | null;
   gstStatus: GstStatus;
+  avatarUrl: string | null;
 }
 
 export const STAFF_ROLES: Role[] = ["ADMIN", "EMPLOYEE"];

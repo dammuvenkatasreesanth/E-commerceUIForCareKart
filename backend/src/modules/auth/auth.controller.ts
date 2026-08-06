@@ -24,7 +24,7 @@ function clearRefreshCookie(res: Response) {
   res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
 }
 
-function serializeUser(user: { id: number; role: string; name: string | null; phone: string | null; email: string | null; accountType: string; gstin: string | null; gstStatus: string }) {
+function serializeUser(user: { id: number; role: string; name: string | null; phone: string | null; email: string | null; accountType: string; gstin: string | null; gstStatus: string; avatarUrl: string | null }) {
   return {
     id: user.id,
     role: user.role,
@@ -34,6 +34,7 @@ function serializeUser(user: { id: number; role: string; name: string | null; ph
     accountType: user.accountType,
     gstin: user.gstin,
     gstStatus: user.gstStatus,
+    avatarUrl: user.avatarUrl,
   };
 }
 

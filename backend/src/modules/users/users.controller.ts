@@ -12,6 +12,7 @@ function serialize(user: Awaited<ReturnType<typeof usersService.getProfile>>) {
     accountType: user.accountType,
     gstin: user.gstin,
     gstStatus: user.gstStatus,
+    avatarUrl: user.avatarUrl,
     createdAt: user.createdAt,
   };
 }

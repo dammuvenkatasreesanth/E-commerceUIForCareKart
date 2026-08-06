@@ -129,6 +129,7 @@ interface OAuthProfile {
   providerId: string;
   email: string;
   name: string;
+  avatarUrl?: string;
 }
 
 // Auto-links on a provider-verified email match (existing password account,
@@ -174,7 +175,12 @@ async function linkOrCreateOAuthUser(profile: OAuthProfile, meta: SessionMeta): 
     throw new ForbiddenError("This account has been blocked or suspended.");
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  // Keeps the profile photo in sync with the provider on every login, not just
+  // on first sign-up — matches whatever the user currently has set there.
+  user = await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date(), avatarUrl: profile.avatarUrl ?? user.avatarUrl },
+  });
   const tokens = await issueSession(user.id, user.role, meta);
   return { ...tokens, user, isNewUser };
 }
@@ -186,7 +192,10 @@ export async function googleLogin(idToken: string, meta: SessionMeta): Promise<T
   if (!payload?.email || !payload.email_verified) {
     throw new BadRequestError("Google account has no verified email.");
   }
-  return linkOrCreateOAuthUser({ provider: "google", providerId: payload.sub, email: payload.email, name: payload.name ?? "" }, meta);
+  return linkOrCreateOAuthUser(
+    { provider: "google", providerId: payload.sub, email: payload.email, name: payload.name ?? "", avatarUrl: payload.picture },
+    meta,
+  );
 }
 
 export async function facebookLogin(
@@ -207,14 +216,20 @@ export async function facebookLogin(
   }
 
   const profile = await axios.get("https://graph.facebook.com/me", {
-    params: { fields: "id,name,email", access_token: accessToken },
+    params: { fields: "id,name,email,picture.type(large)", access_token: accessToken },
   });
   if (!profile.data?.email) {
     throw new BadRequestError("Email permission is required to sign in with Facebook.");
   }
 
   return linkOrCreateOAuthUser(
-    { provider: "facebook", providerId: profile.data.id, email: profile.data.email, name: profile.data.name ?? "" },
+    {
+      provider: "facebook",
+      providerId: profile.data.id,
+      email: profile.data.email,
+      name: profile.data.name ?? "",
+      avatarUrl: profile.data.picture?.data?.url,
+    },
     meta,
   );
 }

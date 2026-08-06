@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { Logo } from "../Logo";
+import { UserAvatar } from "./UserAvatar";
 import { CATEGORIES } from "../../lib/constants";
 import type { AuthUser } from "../../types/user";
 import { useAutosuggest } from "../../hooks/useCatalog";
@@ -187,9 +188,11 @@ export function Header({ cartCount, isLoggedIn, currentUser, searchQuery, setSea
             <div className="px-4 py-4 border-t border-border">
               {isLoggedIn ? (
                 <div className="flex items-center gap-3 p-2 rounded-xl bg-muted">
-                  <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                    {currentUser?.name?.[0]?.toUpperCase() ?? "U"}
-                  </div>
+                  <UserAvatar
+                    avatarUrl={currentUser?.avatarUrl}
+                    name={currentUser?.name}
+                    className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                  />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold truncate">{currentUser?.name}</p>
                     <p className="text-[11px] text-muted-foreground truncate">{currentUser?.phone ?? currentUser?.email}</p>
@@ -323,7 +326,7 @@ export function Header({ cartCount, isLoggedIn, currentUser, searchQuery, setSea
           </button>
           <button onClick={() => navigate(isLoggedIn ? "/account" : "/login")} className="flex md:hidden items-center justify-center p-2 hover:bg-muted rounded-xl">
             {isLoggedIn
-              ? <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center text-white text-xs font-extrabold">{currentUser?.name?.[0]?.toUpperCase() ?? "U"}</div>
+              ? <UserAvatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name} className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center text-white text-xs font-extrabold" />
               : <User className="w-5 h-5" />}
           </button>
           {/* Desktop — note: no admin/staff entry point here by design. Staff reach
