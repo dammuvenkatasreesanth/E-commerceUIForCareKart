@@ -30,6 +30,11 @@ async function reconcilePendingPayment(order: Pick<Order, "id" | "paymentMethod"
   return true;
 }
 
+// Bounds worst-case load from a customer with many stale test/abandoned orders —
+// reconciling is done one at a time (not Promise.all) to avoid bursting concurrent
+// DB connections and outbound PhonePe calls on a resource-constrained host.
+const MAX_RECONCILE_PER_LIST = 3;
+
 export async function listOrdersForUser(userId: number) {
   const orders = await prisma.order.findMany({
     where: { userId },
@@ -37,7 +42,14 @@ export async function listOrdersForUser(userId: number) {
     orderBy: { createdAt: "desc" },
   });
 
-  const reconciledAny = (await Promise.all(orders.map(reconcilePendingPayment))).some(Boolean);
+  let reconciledAny = false;
+  let attempts = 0;
+  for (const order of orders) {
+    if (attempts >= MAX_RECONCILE_PER_LIST) break;
+    if (order.paymentMethod === "COD" || order.paymentStatus !== "PENDING") continue;
+    attempts += 1;
+    if (await reconcilePendingPayment(order)) reconciledAny = true;
+  }
   if (!reconciledAny) return orders;
 
   return prisma.order.findMany({ where: { userId }, include: { items: true }, orderBy: { createdAt: "desc" } });
