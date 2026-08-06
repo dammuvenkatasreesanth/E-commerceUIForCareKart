@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { Check, MapPin, CreditCard, Zap, Building2, IndianRupee, Plus, Mail } from "lucide-react";
+import { Check, MapPin, CreditCard, Zap, Building2, IndianRupee, Plus, Mail, Tag, X } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../hooks/useCart";
@@ -12,10 +12,110 @@ import { OAuthButtons } from "../../components/common/OAuthButtons";
 import { customerLogin, customerSignup, resendVerification } from "../../lib/api/endpoints/auth";
 import { initiatePayment } from "../../lib/api/endpoints/payments";
 import { setPostVerifyRedirect } from "../../lib/postVerifyRedirect";
+import type { Address } from "../../types/address";
 import type { PaymentMethod } from "../../types/order";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
+}
+
+type NewAddressForm = { label: string; name: string; line1: string; city: string; state: string; pin: string; phone: string };
+
+// Shared between the mobile step-wizard and the desktop single-page layout —
+// same address list + add-new form, just placed differently by each caller.
+function AddressList({ addresses, selectedAddressId, onSelect }: { addresses: Address[]; selectedAddressId: number | null; onSelect: (id: number) => void }) {
+  if (addresses.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <MapPin className="w-10 h-10 mx-auto mb-2 text-border" />
+        <p className="text-sm">No saved addresses yet — add one to continue</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2.5">
+      {addresses.map((addr) => (
+        <label key={addr.id} className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedAddressId === addr.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}>
+          <input type="radio" name="address" checked={selectedAddressId === addr.id} onChange={() => onSelect(addr.id)} className="mt-1 accent-primary" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-extrabold bg-muted px-2 py-0.5 rounded-lg">{addr.label ?? "Address"}</span>
+              {addr.isDefault && <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Default</span>}
+            </div>
+            <p className="font-semibold text-sm">{addr.name}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{addr.line1}, {addr.city}, {addr.state} — {addr.pincode}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">📞 {addr.phone}</p>
+          </div>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function AddressForm({ value, onChange, onSave, onCancel, isSaving }: { value: NewAddressForm; onChange: (v: NewAddressForm) => void; onSave: () => void; onCancel: () => void; isSaving: boolean }) {
+  return (
+    <div>
+      <div className="flex gap-2 mb-3">
+        {["Home", "Office", "Other"].map((l) => (
+          <button key={l} onClick={() => onChange({ ...value, label: l })} className={`px-3 py-1.5 text-xs font-semibold rounded-xl border-2 transition-all ${value.label === l ? "border-primary bg-primary/5 text-primary" : "border-border"}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-3">
+        {[
+          { k: "name", label: "Full Name", ph: "Recipient name" },
+          { k: "line1", label: "Address", ph: "Flat, Street, Area" },
+          { k: "city", label: "City", ph: "Mumbai" },
+          { k: "state", label: "State", ph: "Maharashtra" },
+          { k: "pin", label: "PIN Code", ph: "400001" },
+          { k: "phone", label: "Phone", ph: "9876543210" },
+        ].map((f) => (
+          <div key={f.k}>
+            <label className="block text-xs font-semibold mb-1">{f.label}</label>
+            <input
+              value={(value as Record<string, string>)[f.k]}
+              onChange={(e) => onChange({ ...value, [f.k]: e.target.value })}
+              placeholder={f.ph}
+              className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 mt-4">
+        <button onClick={onSave} disabled={isSaving} className="flex-1 py-2.5 bg-primary text-white text-sm font-bold rounded-xl disabled:opacity-40">
+          {isSaving ? "Saving…" : "Save Address"}
+        </button>
+        <button onClick={onCancel} className="px-4 py-2.5 bg-muted text-muted-foreground text-sm font-semibold rounded-xl">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const PAYMENT_OPTIONS: { id: PaymentMethod; label: string; sub: string; icon: typeof Zap }[] = [
+  { id: "UPI", label: "UPI", sub: "PhonePe, GPay, Paytm", icon: Zap },
+  { id: "CARD", label: "Credit / Debit Card", sub: "Visa, Mastercard, RuPay", icon: CreditCard },
+  { id: "NETBANKING", label: "Net Banking", sub: "All major banks", icon: Building2 },
+  { id: "COD", label: "Cash on Delivery", sub: "≤₹5000", icon: IndianRupee },
+];
+
+function PaymentMethodOptions({ payMethod, onSelect }: { payMethod: PaymentMethod; onSelect: (m: PaymentMethod) => void }) {
+  return (
+    <div className="space-y-2">
+      {PAYMENT_OPTIONS.map((m) => (
+        <label key={m.id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer ${payMethod === m.id ? "border-primary bg-secondary" : "border-border"}`}>
+          <input type="radio" name="pay" value={m.id} checked={payMethod === m.id} onChange={() => onSelect(m.id)} className="accent-primary" />
+          <m.icon className={`w-5 h-5 ${payMethod === m.id ? "text-primary" : "text-muted-foreground"}`} />
+          <div>
+            <p className="font-semibold text-sm">{m.label}</p>
+            <p className="text-[11px] text-muted-foreground">{m.sub}</p>
+          </div>
+        </label>
+      ))}
+    </div>
+  );
 }
 
 export function CheckoutPage() {
@@ -193,6 +293,7 @@ function CheckoutAuthGate() {
 // ─── Address → Payment → Review, for an already-authenticated user ──────────
 function CheckoutWizard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: cartData, isLoading: cartLoading } = useCart();
   const { data: addresses, isLoading: addressesLoading } = useAddresses();
   const createAddress = useCreateAddress();
@@ -201,9 +302,11 @@ function CheckoutWizard() {
   const [step, setStep] = useState(1);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newAddr, setNewAddr] = useState({ label: "Home", name: "", line1: "", city: "", state: "", pin: "", phone: "" });
+  const [newAddr, setNewAddr] = useState<NewAddressForm>({ label: "Home", name: "", line1: "", city: "", state: "", pin: "", phone: "" });
   const [payMethod, setPayMethod] = useState<PaymentMethod>("COD");
   const [isPlacing, setIsPlacing] = useState(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
 
   useEffect(() => {
     if (addresses && addresses.length > 0 && selectedAddressId === null) {
@@ -248,7 +351,7 @@ function CheckoutWizard() {
     if (!selectedAddressId || isPlacing) return;
     setIsPlacing(true);
     try {
-      const order = await placeOrder.mutateAsync({ addressId: selectedAddressId, paymentMethod: payMethod });
+      const order = await placeOrder.mutateAsync({ addressId: selectedAddressId, paymentMethod: payMethod, couponCode: appliedCoupon ?? undefined });
       if (payMethod === "COD") {
         navigate(`/order-confirmation?orderId=${order.id}`);
         return;
@@ -272,7 +375,8 @@ function CheckoutWizard() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 pb-24 md:pb-8">
+    <>
+    <div className="md:hidden max-w-2xl mx-auto px-4 py-6 pb-24">
       <div className="flex items-center justify-center gap-0 mb-8">
         {steps.map((s, i) => (
           <div key={s} className="flex items-center">
@@ -305,68 +409,11 @@ function CheckoutWizard() {
           {addressesLoading && <p className="text-sm text-muted-foreground py-6 text-center">Loading addresses…</p>}
 
           {!addressesLoading && !showAddForm && (
-            <div className="space-y-2.5">
-              {(addresses ?? []).map((addr) => (
-                <label key={addr.id} className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedAddressId === addr.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}>
-                  <input type="radio" name="address" checked={selectedAddressId === addr.id} onChange={() => setSelectedAddressId(addr.id)} className="mt-1 accent-primary" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-extrabold bg-muted px-2 py-0.5 rounded-lg">{addr.label ?? "Address"}</span>
-                      {addr.isDefault && <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Default</span>}
-                    </div>
-                    <p className="font-semibold text-sm">{addr.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{addr.line1}, {addr.city}, {addr.state} — {addr.pincode}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">📞 {addr.phone}</p>
-                  </div>
-                </label>
-              ))}
-              {(addresses ?? []).length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <MapPin className="w-10 h-10 mx-auto mb-2 text-border" />
-                  <p className="text-sm">No saved addresses yet — add one to continue</p>
-                </div>
-              )}
-            </div>
+            <AddressList addresses={addresses ?? []} selectedAddressId={selectedAddressId} onSelect={setSelectedAddressId} />
           )}
 
           {showAddForm && (
-            <div>
-              <div className="flex gap-2 mb-3">
-                {["Home", "Office", "Other"].map((l) => (
-                  <button key={l} onClick={() => setNewAddr((a) => ({ ...a, label: l }))} className={`px-3 py-1.5 text-xs font-semibold rounded-xl border-2 transition-all ${newAddr.label === l ? "border-primary bg-primary/5 text-primary" : "border-border"}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-              <div className="space-y-3">
-                {[
-                  { k: "name", label: "Full Name", ph: "Recipient name" },
-                  { k: "line1", label: "Address", ph: "Flat, Street, Area" },
-                  { k: "city", label: "City", ph: "Mumbai" },
-                  { k: "state", label: "State", ph: "Maharashtra" },
-                  { k: "pin", label: "PIN Code", ph: "400001" },
-                  { k: "phone", label: "Phone", ph: "9876543210" },
-                ].map((f) => (
-                  <div key={f.k}>
-                    <label className="block text-xs font-semibold mb-1">{f.label}</label>
-                    <input
-                      value={(newAddr as Record<string, string>)[f.k]}
-                      onChange={(e) => setNewAddr((a) => ({ ...a, [f.k]: e.target.value }))}
-                      placeholder={f.ph}
-                      className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button onClick={handleSaveAddress} disabled={createAddress.isPending} className="flex-1 py-2.5 bg-primary text-white text-sm font-bold rounded-xl disabled:opacity-40">
-                  {createAddress.isPending ? "Saving…" : "Save Address"}
-                </button>
-                <button onClick={() => setShowAddForm(false)} className="px-4 py-2.5 bg-muted text-muted-foreground text-sm font-semibold rounded-xl">
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <AddressForm value={newAddr} onChange={setNewAddr} onSave={handleSaveAddress} onCancel={() => setShowAddForm(false)} isSaving={createAddress.isPending} />
           )}
 
           {!showAddForm && (
@@ -383,24 +430,8 @@ function CheckoutWizard() {
             <CreditCard className="w-5 h-5 text-primary" />
             Payment Method
           </h2>
-          <div className="space-y-2 mb-5">
-            {(
-              [
-                { id: "UPI", label: "UPI", sub: "PhonePe, GPay, Paytm", icon: Zap },
-                { id: "CARD", label: "Credit / Debit Card", sub: "Visa, Mastercard, RuPay", icon: CreditCard },
-                { id: "NETBANKING", label: "Net Banking", sub: "All major banks", icon: Building2 },
-                { id: "COD", label: "Cash on Delivery", sub: "≤₹5000", icon: IndianRupee },
-              ] as { id: PaymentMethod; label: string; sub: string; icon: typeof Zap }[]
-            ).map((m) => (
-              <label key={m.id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer ${payMethod === m.id ? "border-primary bg-secondary" : "border-border"}`}>
-                <input type="radio" name="pay" value={m.id} checked={payMethod === m.id} onChange={() => setPayMethod(m.id)} className="accent-primary" />
-                <m.icon className={`w-5 h-5 ${payMethod === m.id ? "text-primary" : "text-muted-foreground"}`} />
-                <div>
-                  <p className="font-semibold text-sm">{m.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{m.sub}</p>
-                </div>
-              </label>
-            ))}
+          <div className="mb-5">
+            <PaymentMethodOptions payMethod={payMethod} onSelect={setPayMethod} />
           </div>
           <div className="flex gap-3">
             <button onClick={() => setStep(1)} className="px-4 py-3 border-2 border-border rounded-2xl text-sm font-semibold">
@@ -468,5 +499,123 @@ function CheckoutWizard() {
         </div>
       )}
     </div>
+
+    {/* ─── Desktop: single-page two-column layout (mobile keeps the step wizard above) ─── */}
+    <div className="hidden md:block max-w-6xl mx-auto px-4 py-8 pb-16">
+      <h1 className="text-2xl font-extrabold font-['Plus_Jakarta_Sans'] mb-6">Checkout</h1>
+      <div className="grid grid-cols-3 gap-6 items-start">
+        <div className="col-span-2 space-y-4">
+          <div className="bg-white border border-border rounded-2xl p-5">
+            <h2 className="font-bold text-lg mb-3 flex items-center gap-2">
+              <Mail className="w-5 h-5 text-primary" />
+              Contact Information
+            </h2>
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-muted rounded-xl text-sm">
+              <span className="flex-1">{user?.email ?? "—"}</span>
+              <Check className="w-4 h-4 text-emerald-500" />
+            </div>
+          </div>
+
+          <div className="bg-white border border-border rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-lg flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-primary" />
+                Delivery Address
+              </h2>
+              {!showAddForm && (
+                <button onClick={() => setShowAddForm(true)} className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary text-xs font-bold rounded-xl">
+                  <Plus className="w-3.5 h-3.5" />
+                  Add New
+                </button>
+              )}
+            </div>
+            {addressesLoading && <p className="text-sm text-muted-foreground py-6 text-center">Loading addresses…</p>}
+            {!addressesLoading && !showAddForm && (
+              <AddressList addresses={addresses ?? []} selectedAddressId={selectedAddressId} onSelect={setSelectedAddressId} />
+            )}
+            {showAddForm && (
+              <AddressForm value={newAddr} onChange={setNewAddr} onSave={handleSaveAddress} onCancel={() => setShowAddForm(false)} isSaving={createAddress.isPending} />
+            )}
+          </div>
+
+          <div className="bg-white border border-border rounded-2xl p-5">
+            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" />
+              Payment Method
+            </h2>
+            <PaymentMethodOptions payMethod={payMethod} onSelect={setPayMethod} />
+          </div>
+        </div>
+
+        <div className="col-span-1">
+          <div className="bg-white border border-border rounded-2xl p-5 sticky top-6">
+            <h2 className="font-bold text-lg mb-4">Order Summary</h2>
+            <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1">
+              {cartItems.map((item) => (
+                <div key={item.id} className="flex items-center gap-3">
+                  <ImageWithFallback src={item.image ?? undefined} className="w-11 h-11 rounded-xl object-cover flex-shrink-0" alt="" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">{item.packQty > 1 ? `Pack of ${item.packQty}` : "1 unit"}</p>
+                  </div>
+                  <p className="font-bold text-sm whitespace-nowrap">₹{item.lineTotal.toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-4">
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between px-3 py-2 bg-secondary rounded-xl text-sm">
+                  <span className="flex items-center gap-1.5 font-semibold text-primary">
+                    <Tag className="w-3.5 h-3.5" />
+                    {appliedCoupon} applied
+                  </span>
+                  <button onClick={() => { setAppliedCoupon(null); setCouponInput(""); }} className="text-muted-foreground hover:text-destructive">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder="Enter coupon code"
+                    className="flex-1 px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+                  />
+                  <button
+                    onClick={() => couponInput.trim() && setAppliedCoupon(couponInput.trim())}
+                    disabled={!couponInput.trim()}
+                    className="px-4 py-2 bg-foreground text-white text-sm font-bold rounded-xl disabled:opacity-40"
+                  >
+                    Apply
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border pt-3 space-y-2 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal</span>
+                <span>₹{subtotal.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Shipping</span>
+                <span>{shipping === 0 ? "FREE" : `₹${shipping}`}</span>
+              </div>
+              <div className="flex justify-between font-extrabold text-base border-t border-border pt-2">
+                <span>Total</span>
+                <span>₹{total.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <button onClick={handlePlaceOrder} disabled={isPlacing || !selectedAddressId} className="w-full mt-5 py-3 bg-primary text-white font-bold rounded-2xl disabled:opacity-60">
+              {isPlacing ? "Placing Order…" : `Place Order — ₹${total.toLocaleString()}`}
+            </button>
+            <p className="text-center text-[11px] text-muted-foreground mt-3">🔒 Secure checkout · encrypted payment</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    </>
   );
 }
