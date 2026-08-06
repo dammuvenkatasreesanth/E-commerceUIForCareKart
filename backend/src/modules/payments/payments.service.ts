@@ -65,7 +65,13 @@ async function applyPaymentResult(payment: Payment, result: phonepe.PhonePeCallb
         data: { orderId: payment.orderId, toStatus: "CONFIRMED", note: "Payment received via PhonePe" },
       });
     } else {
-      await tx.order.update({ where: { id: payment.orderId }, data: { paymentStatus: "FAILED" } });
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: { paymentStatus: "FAILED", status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Payment was not completed" },
+      });
+      await tx.orderStatusHistory.create({
+        data: { orderId: payment.orderId, toStatus: "CANCELLED", note: "Order cancelled — payment failed" },
+      });
     }
   });
 
