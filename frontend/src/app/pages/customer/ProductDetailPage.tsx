@@ -100,10 +100,7 @@ export function ProductDetailPage() {
         quantity: qty,
       },
       {
-        onSuccess: () => {
-          toast.success("Added to cart");
-          navigate("/cart");
-        },
+        onSuccess: () => toast.success("Added to cart"),
         onError: () => toast.error("Couldn't add to cart"),
       },
     );
