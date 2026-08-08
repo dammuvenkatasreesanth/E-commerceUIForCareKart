@@ -10,6 +10,7 @@ import { generateInvoicePdf } from "../../providers/pdf/invoice.pdf";
 import { sendMail } from "../../providers/email/mailer";
 import { orderConfirmationEmail } from "../../providers/email/templates/orderConfirmation";
 import { logger } from "../../lib/logger";
+import { loadOrderItems } from "../../lib/orderRelations";
 
 interface CreateOrderInput {
   addressId: number;
@@ -140,8 +141,10 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
     return id;
   });
 
-  const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId), with: { items: true } });
-  if (!order) throw new NotFoundError("Order not found");
+  const [orderRow] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!orderRow) throw new NotFoundError("Order not found");
+  const itemsByOrder = await loadOrderItems([orderId]);
+  const order = { ...orderRow, items: itemsByOrder.get(orderId) ?? [] };
 
   if (isCod) {
     await sendOrderConfirmation(order.id).catch((err) => {
@@ -153,11 +156,14 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
 }
 
 export async function sendOrderConfirmation(orderId: number): Promise<void> {
-  const order = await db.query.orders.findFirst({
-    where: eq(orders.id, orderId),
-    with: { items: true, user: true },
-  });
-  if (!order) return;
+  const [orderRow] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!orderRow) return;
+
+  const [itemsByOrder, [user]] = await Promise.all([
+    loadOrderItems([orderId]),
+    db.select().from(users).where(eq(users.id, orderRow.userId)).limit(1),
+  ]);
+  const order = { ...orderRow, items: itemsByOrder.get(orderId) ?? [], user };
 
   const pdfBuffer = await generateInvoicePdf(order);
   const recipient = order.user.email;

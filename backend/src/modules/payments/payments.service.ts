@@ -127,16 +127,15 @@ export async function sweepStalePayments(): Promise<void> {
 }
 
 export async function getStatus(userId: number, orderId: number) {
-  const order = await db.query.orders.findFirst({
-    where: eq(orders.id, orderId),
-    with: { payments: { orderBy: [desc(payments.createdAt)], limit: 1 } },
-  });
+  const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
   if (!order) throw new NotFoundError("Order not found");
   if (order.userId !== userId) throw new ForbiddenError("This order does not belong to you");
+
+  const latestPayment = await db.query.payments.findFirst({ where: eq(payments.orderId, orderId), orderBy: [desc(payments.createdAt)] });
 
   return {
     orderStatus: order.status,
     paymentStatus: order.paymentStatus,
-    latestPayment: order.payments[0] ?? null,
+    latestPayment: latestPayment ?? null,
   };
 }
