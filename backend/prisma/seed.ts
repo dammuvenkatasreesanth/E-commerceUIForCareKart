@@ -53,8 +53,6 @@ interface SeedProduct {
   description: string;
   price: number;
   mrp: number;
-  ratingAvg: number;
-  ratingCount: number;
   category: string;
   badge: string;
   material: string;
@@ -74,8 +72,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "The NitroShield Pro is engineered for healthcare professionals who demand reliability. Made from 100% synthetic nitrile, these gloves offer excellent chemical resistance while maintaining superior tactile sensitivity. The textured fingertip design ensures a confident grip even in wet conditions, making them ideal for medical examinations, lab work, and industrial applications. Each glove undergoes rigorous AQL 1.5 testing to ensure a defect rate below 1.5%, meeting the strictest healthcare standards.",
     price: 499,
     mrp: 699,
-    ratingAvg: 4.8,
-    ratingCount: 2341,
     category: "Nitrile",
     badge: "Bestseller",
     material: "100% Nitrile",
@@ -93,8 +89,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "LatexGuard Classic surgical gloves provide the tactile sensitivity required for delicate surgical procedures. Manufactured with natural rubber latex and featuring a beaded cuff for easy donning, these sterile gloves meet the highest international standards for surgical applications.",
     price: 329,
     mrp: 449,
-    ratingAvg: 4.6,
-    ratingCount: 1872,
     category: "Latex",
     badge: "Top Rated",
     material: "Natural Latex",
@@ -112,8 +106,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "VinylFlex Economy Gloves are the smart choice for food service, light-duty cleaning, and general-purpose applications where cost efficiency matters. Made from high-quality PVC with no latex proteins, they are safe for users with latex allergies.",
     price: 199,
     mrp: 279,
-    ratingAvg: 4.3,
-    ratingCount: 983,
     category: "Vinyl",
     badge: "",
     material: "PVC Vinyl",
@@ -131,8 +123,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "The N95 PureMask Respirator provides 95% filtration efficiency against non-oil-based particles, offering hospital-grade protection in a comfortable, breathable design. The 5-layer construction and NIOSH approval make this the go-to respiratory protection for healthcare workers and industrial users alike.",
     price: 249,
     mrp: 349,
-    ratingAvg: 4.9,
-    ratingCount: 3210,
     category: "Masks",
     badge: "Bestseller",
     material: "Melt-blown PP",
@@ -150,8 +140,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "ClearView Face Shields deliver full-face splash protection with optically clear polycarbonate visors. The adjustable headband fits all head sizes, and the anti-fog coating ensures unobstructed vision in high-humidity environments.",
     price: 649,
     mrp: 899,
-    ratingAvg: 4.5,
-    ratingCount: 412,
     category: "Face Protection",
     badge: "",
     material: "Polycarbonate",
@@ -169,8 +157,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "SaniSpritz Hand Sanitizer uses the WHO-recommended 70% isopropyl alcohol formula to eliminate 99.99% of common bacteria and viruses within 30 seconds. The fragrance-free, skin-conditioning formula is designed for frequent use without excessive drying.",
     price: 159,
     mrp: 219,
-    ratingAvg: 4.4,
-    ratingCount: 1543,
     category: "Hygiene",
     badge: "",
     material: "70% IPA",
@@ -188,8 +174,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "FoodGuard Poly Gloves provide reliable barrier protection for food preparation and serving. Ultra-thin and ambidextrous, they allow natural hand movement while maintaining strict food-safety hygiene standards.",
     price: 89,
     mrp: 129,
-    ratingAvg: 4.1,
-    ratingCount: 764,
     category: "Hygiene",
     badge: "",
     material: "Polyethylene",
@@ -207,8 +191,6 @@ const SEED_PRODUCTS: SeedProduct[] = [
       "The ShieldPro PPE Complete Kit bundles everything a healthcare worker needs: N95 mask, nitrile gloves, face shield, disposable gown, and shoe covers. Packaged individually for sterility and convenience.",
     price: 1249,
     mrp: 1599,
-    ratingAvg: 4.6,
-    ratingCount: 287,
     category: "PPE Kits",
     badge: "New",
     material: "Multi-material",
@@ -326,8 +308,6 @@ async function seedCatalog() {
           specs: p.specs,
           moq: p.moq,
           inStock: p.inStock,
-          ratingAvg: String(p.ratingAvg),
-          ratingCount: p.ratingCount,
           updatedAt: new Date(),
         })
         .$returningId();
