@@ -7,7 +7,7 @@ import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../hooks/useCart";
 import { useAddresses, useCreateAddress } from "../../hooks/useAddresses";
-import { usePlaceOrder } from "../../hooks/useOrders";
+import { usePlaceOrder, useCancelOrder } from "../../hooks/useOrders";
 import { useAuthenticateAndMergeCart } from "../../hooks/useAuthenticateAndMergeCart";
 import { usePollForVerification } from "../../hooks/usePollForVerification";
 import { OAuthButtons } from "../../components/common/OAuthButtons";
@@ -329,6 +329,13 @@ function CheckoutWizard() {
   const [isPlacing, setIsPlacing] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  // Order was placed and paid-online, but we hold off actually leaving for
+  // PhonePe's hosted page for a few seconds — window.location.href is a real
+  // navigation away from this app, so it's the last moment a "changed my
+  // mind" cancel button can exist at all.
+  const [pendingRedirect, setPendingRedirect] = useState<{ orderId: number; redirectUrl: string } | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState(5);
+  const cancelPendingPayment = useCancelOrder(pendingRedirect?.orderId ?? -1);
 
   useEffect(() => {
     if (addresses && addresses.length > 0 && selectedAddressId === null) {
@@ -338,11 +345,15 @@ function CheckoutWizard() {
   }, [addresses, selectedAddressId]);
 
   useEffect(() => {
-    if (buyNow || cartLoading) return;
+    // pendingRedirect: the order was already placed (which clears the real
+    // cart and invalidates this query) and we're showing the "redirecting to
+    // payment" interstitial — an empty cart at that point is expected, not a
+    // reason to bounce the user away from it.
+    if (buyNow || cartLoading || pendingRedirect) return;
     if ((cartData?.items.length ?? 0) === 0) {
       navigate("/cart", { replace: true });
     }
-  }, [buyNow, cartLoading, cartData, navigate]);
+  }, [buyNow, cartLoading, cartData, pendingRedirect, navigate]);
 
   useEffect(() => {
     // The item went out of stock or was removed between the PDP and here.
@@ -351,6 +362,29 @@ function CheckoutWizard() {
       navigate(-1);
     }
   }, [buyNow, cartLoading, cartData, navigate]);
+
+  useEffect(() => {
+    if (!pendingRedirect) return;
+    if (redirectCountdown <= 0) {
+      window.location.href = pendingRedirect.redirectUrl;
+      return;
+    }
+    const t = setTimeout(() => setRedirectCountdown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [pendingRedirect, redirectCountdown]);
+
+  const handleCancelPendingPayment = () => {
+    if (!pendingRedirect) return;
+    cancelPendingPayment.mutate("Cancelled by customer before completing payment", {
+      onSuccess: () => {
+        toast.success("Payment cancelled. Your order was not charged.");
+        setPendingRedirect(null);
+        if (buyNow) navigate(-1);
+        else navigate("/cart");
+      },
+      onError: () => toast.error("Couldn't cancel in time — continuing to the payment page."),
+    });
+  };
 
   const cartItems = cartData?.items ?? [];
   const subtotal = cartData?.subtotal ?? 0;
@@ -394,7 +428,8 @@ function CheckoutWizard() {
       }
       try {
         const { redirectUrl } = await initiatePayment(order.id);
-        window.location.href = redirectUrl;
+        setRedirectCountdown(5);
+        setPendingRedirect({ orderId: order.id, redirectUrl });
       } catch {
         toast.error("Online payment isn't available right now. Your order was placed as unpaid — you can retry payment or switch to Cash on Delivery from your order.");
         navigate(`/order-confirmation?orderId=${order.id}`);
@@ -408,6 +443,32 @@ function CheckoutWizard() {
 
   if (cartLoading) {
     return <div className="max-w-2xl mx-auto px-4 py-16 text-center pb-24 text-sm text-muted-foreground">Loading…</div>;
+  }
+
+  if (pendingRedirect) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center pb-24 md:pb-16">
+        <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-5">
+          <CreditCard className="w-7 h-7 text-primary" />
+        </div>
+        <h1 className="text-xl font-extrabold font-['Plus_Jakarta_Sans'] mb-2">Redirecting to secure payment…</h1>
+        <p className="text-sm text-muted-foreground mb-6">
+          You'll be taken to PhonePe to complete your payment in {redirectCountdown}s.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button onClick={() => { window.location.href = pendingRedirect.redirectUrl; }} className="w-full py-3 bg-primary text-white font-bold rounded-2xl hover:bg-primary/90 transition-colors">
+            Continue Now
+          </button>
+          <button
+            onClick={handleCancelPendingPayment}
+            disabled={cancelPendingPayment.isPending}
+            className="w-full py-3 border-2 border-border text-foreground font-bold rounded-2xl hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {cancelPendingPayment.isPending ? "Cancelling…" : "Cancel Payment"}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
