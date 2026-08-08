@@ -7,6 +7,7 @@ import {
   customerLoginLimiter,
   staffLoginLimiter,
   staffForgotPasswordLimiter,
+  verificationStatusLimiter,
 } from "../../middleware/rateLimit.middleware";
 import {
   customerSignupSchema,
@@ -15,6 +16,7 @@ import {
   resetPasswordSchema,
   verifyEmailSchema,
   resendVerificationSchema,
+  verificationStatusSchema,
   googleLoginSchema,
   facebookLoginSchema,
   staffLoginSchema,
@@ -31,6 +33,7 @@ authRouter.post("/signup", authSignupLimiter, validate({ body: customerSignupSch
 authRouter.post("/login", customerLoginLimiter, validate({ body: customerLoginSchema }), asyncHandler(controller.customerLoginHandler));
 authRouter.post("/verify-email", validate({ body: verifyEmailSchema }), asyncHandler(controller.verifyEmailHandler));
 authRouter.post("/resend-verification", authSignupLimiter, validate({ body: resendVerificationSchema }), asyncHandler(controller.resendVerificationHandler));
+authRouter.get("/verification-status", verificationStatusLimiter, validate({ query: verificationStatusSchema }), asyncHandler(controller.verificationStatusHandler));
 authRouter.post("/forgot-password", staffForgotPasswordLimiter, validate({ body: forgotPasswordSchema }), asyncHandler(controller.forgotPasswordHandler));
 authRouter.post("/reset-password", validate({ body: resetPasswordSchema }), asyncHandler(controller.resetPasswordHandler));
 

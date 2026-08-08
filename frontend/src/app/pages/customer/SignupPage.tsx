@@ -5,7 +5,8 @@ import { Mail } from "lucide-react";
 import { AuthLayout } from "../../components/common/AuthLayout";
 import { OAuthButtons } from "../../components/common/OAuthButtons";
 import { customerSignup, resendVerification } from "../../lib/api/endpoints/auth";
-import { setPostVerifyRedirect } from "../../lib/postVerifyRedirect";
+import { setPostVerifyRedirect, takePostVerifyRedirect } from "../../lib/postVerifyRedirect";
+import { usePollForVerification } from "../../hooks/usePollForVerification";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -23,6 +24,17 @@ export function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [sent, setSent] = useState(false);
+
+  // Covers the case where the emailed link gets opened somewhere other than
+  // this tab (a different device, or the mail app's own browser) — without
+  // this, this tab would sit on "check your email" forever with no way to
+  // notice verification happened elsewhere.
+  usePollForVerification({
+    email: email.trim(),
+    password,
+    enabled: sent,
+    onDone: () => navigate(takePostVerifyRedirect() ?? "/complete-profile", { replace: true }),
+  });
 
   const handleSubmit = async () => {
     if (!name.trim() || !email.trim() || isSubmitting) return;

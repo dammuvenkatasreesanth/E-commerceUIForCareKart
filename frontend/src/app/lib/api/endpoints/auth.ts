@@ -22,6 +22,10 @@ export function resendVerification(email: string): Promise<{ message: string }> 
   return api.post("/auth/resend-verification", { email });
 }
 
+export function checkVerificationStatus(email: string): Promise<{ verified: boolean }> {
+  return api.get(`/auth/verification-status?email=${encodeURIComponent(email)}`);
+}
+
 export function forgotPassword(email: string): Promise<{ message: string }> {
   return api.post("/auth/forgot-password", { email });
 }

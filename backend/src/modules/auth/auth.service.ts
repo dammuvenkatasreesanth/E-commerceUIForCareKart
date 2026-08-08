@@ -90,6 +90,15 @@ export async function resendVerificationEmail(email: string): Promise<void> {
   await sendVerificationEmail(user.id, email, user.name ?? "");
 }
 
+// Lets the tab that started signup notice — without a manual refresh — that
+// the verification link was opened somewhere else (a different device, or
+// even just the phone's mail app), so it can pick up the flow itself instead
+// of leaving the user stranded on "check your email" forever.
+export async function checkVerificationStatus(email: string): Promise<{ verified: boolean }> {
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  return { verified: !!user?.emailVerified };
+}
+
 export async function verifyEmail(
   token: string,
   meta: SessionMeta,

@@ -44,6 +44,19 @@ export const staffForgotPasswordLimiter = rateLimit({
   message: { error: { message: "Too many password reset requests. Please try again later." } },
 });
 
+// Polled every few seconds by the tab that started signup, so it needs a much
+// higher ceiling than the other auth limiters — bounded generously rather than
+// tightly, since it only ever reveals a boolean already inferable from the
+// signup/resend-verification endpoints.
+export const verificationStatusLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `verification-status:${req.query?.email ?? req.ip}`,
+  message: { error: { message: "Too many requests. Please try again later." } },
+});
+
 export const reviewHelpfulLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,

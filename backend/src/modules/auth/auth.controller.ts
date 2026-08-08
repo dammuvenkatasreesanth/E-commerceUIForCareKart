@@ -66,6 +66,11 @@ export async function resendVerificationHandler(req: Request, res: Response) {
   res.status(200).json({ message: "If that email exists and isn't verified yet, a new link has been sent." });
 }
 
+export async function verificationStatusHandler(req: Request, res: Response) {
+  const result = await authService.checkVerificationStatus(req.query.email as string);
+  res.status(200).json(result);
+}
+
 export async function forgotPasswordHandler(req: Request, res: Response) {
   await authService.forgotPassword(req.body.email, "/reset-password");
   res.status(200).json({ message: "If that email exists, a reset link has been sent." });

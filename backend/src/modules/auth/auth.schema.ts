@@ -28,6 +28,10 @@ export const resendVerificationSchema = z.object({
   email: z.string().email(),
 });
 
+export const verificationStatusSchema = z.object({
+  email: z.string().email(),
+});
+
 export const googleLoginSchema = z.object({
   idToken: z.string().min(10),
 });

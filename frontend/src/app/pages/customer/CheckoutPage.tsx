@@ -9,6 +9,7 @@ import { useCart } from "../../hooks/useCart";
 import { useAddresses, useCreateAddress } from "../../hooks/useAddresses";
 import { usePlaceOrder } from "../../hooks/useOrders";
 import { useAuthenticateAndMergeCart } from "../../hooks/useAuthenticateAndMergeCart";
+import { usePollForVerification } from "../../hooks/usePollForVerification";
 import { OAuthButtons } from "../../components/common/OAuthButtons";
 import { customerLogin, customerSignup, resendVerification } from "../../lib/api/endpoints/auth";
 import { initiatePayment } from "../../lib/api/endpoints/payments";
@@ -149,6 +150,13 @@ function CheckoutAuthGate() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [signupSent, setSignupSent] = useState(false);
+
+  // Covers the case where the emailed link gets opened somewhere other than
+  // this tab (a different device, or the mail app's own browser). No explicit
+  // navigation needed on completion — authenticateAndMergeCart flips
+  // AuthContext, and CheckoutPage's status check swaps this gate out for
+  // CheckoutWizard automatically, buyNow state intact (same page instance).
+  usePollForVerification({ email: email.trim(), password, enabled: signupSent, onDone: () => {} });
 
   const handleLogin = async () => {
     if (!email.trim() || !password || isSubmitting) return;
