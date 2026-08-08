@@ -1,19 +1,39 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or, type SQL } from "drizzle-orm";
 import { db } from "../../db";
-import { banners, categories, packPriceTiers, productImages, productSizes, products, reviews } from "../../db/schema";
+import { banners, categories, packPriceTiers, productImages, productSizes, products, reviews, users } from "../../db/schema";
 import { NotFoundError } from "../../lib/errors";
+import { groupBy, indexBy } from "../../lib/batchLoad";
 import type { listProductsQuerySchema } from "./catalog.schema";
 import type { z } from "zod";
 
 type ListProductsQuery = z.infer<typeof listProductsQuerySchema>;
+type ProductRow = typeof products.$inferSelect;
 
-function productWith() {
-  return {
-    images: { orderBy: [asc(productImages.sortOrder)] },
-    sizes: { orderBy: [asc(productSizes.sortOrder)] },
-    packTiers: { orderBy: [asc(packPriceTiers.tierIndex)] },
-    category: true as const,
-  };
+async function attachProductRelations(rows: ProductRow[]) {
+  if (rows.length === 0) return [];
+
+  const productIds = rows.map((r) => r.id);
+  const categoryIds = [...new Set(rows.map((r) => r.categoryId))];
+
+  const [images, sizes, tiers, cats] = await Promise.all([
+    db.select().from(productImages).where(inArray(productImages.productId, productIds)).orderBy(asc(productImages.sortOrder)),
+    db.select().from(productSizes).where(inArray(productSizes.productId, productIds)).orderBy(asc(productSizes.sortOrder)),
+    db.select().from(packPriceTiers).where(inArray(packPriceTiers.productId, productIds)).orderBy(asc(packPriceTiers.tierIndex)),
+    db.select().from(categories).where(inArray(categories.id, categoryIds)),
+  ]);
+
+  const imagesByProduct = groupBy(images, (i) => i.productId);
+  const sizesByProduct = groupBy(sizes, (s) => s.productId);
+  const tiersByProduct = groupBy(tiers, (t) => t.productId);
+  const categoryById = indexBy(cats, (c) => c.id);
+
+  return rows.map((r) => ({
+    ...r,
+    images: imagesByProduct.get(r.id) ?? [],
+    sizes: sizesByProduct.get(r.id) ?? [],
+    packTiers: tiersByProduct.get(r.id) ?? [],
+    category: categoryById.get(r.categoryId)!,
+  }));
 }
 
 function sortToOrderBy(sort: ListProductsQuery["sort"]) {
@@ -58,36 +78,45 @@ export async function listProducts(query: ListProductsQuery) {
 
   const where = and(...conditions);
 
-  const [items, [{ value: total }]] = await Promise.all([
-    db.query.products.findMany({
-      where,
-      with: productWith(),
-      orderBy: [sortToOrderBy(query.sort)],
-      limit: query.limit,
-      offset: (query.page - 1) * query.limit,
-    }),
+  const [rows, [{ value: total }]] = await Promise.all([
+    db
+      .select()
+      .from(products)
+      .where(where)
+      .orderBy(sortToOrderBy(query.sort))
+      .limit(query.limit)
+      .offset((query.page - 1) * query.limit),
     db.select({ value: count() }).from(products).where(where),
   ]);
+
+  const items = await attachProductRelations(rows);
 
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 export async function getProductBySlug(slug: string) {
-  const product = await db.query.products.findFirst({
-    where: eq(products.slug, slug),
-    with: {
-      ...productWith(),
-      reviews: {
-        where: eq(reviews.status, "APPROVED"),
-        orderBy: [desc(reviews.createdAt)],
-        limit: 10,
-        with: { user: { columns: { name: true } } },
-      },
-    },
-  });
-  if (!product || !product.isActive) throw new NotFoundError("Product not found");
+  const [row] = await db.select().from(products).where(eq(products.slug, slug)).limit(1);
+  if (!row || !row.isActive) throw new NotFoundError("Product not found");
 
-  return product;
+  const [product] = await attachProductRelations([row]);
+
+  const reviewRows = await db
+    .select()
+    .from(reviews)
+    .where(and(eq(reviews.productId, row.id), eq(reviews.status, "APPROVED")))
+    .orderBy(desc(reviews.createdAt))
+    .limit(10);
+
+  const reviewUsers = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(inArray(users.id, [...new Set(reviewRows.map((r) => r.userId))]));
+  const userNameById = indexBy(reviewUsers, (u) => u.id);
+
+  return {
+    ...product,
+    reviews: reviewRows.map((r) => ({ ...r, user: { name: userNameById.get(r.userId)?.name ?? null } })),
+  };
 }
 
 export async function listCategories() {
@@ -95,13 +124,25 @@ export async function listCategories() {
 }
 
 export async function autosuggest(q: string, limit: number) {
-  const rows = await db.query.products.findMany({
-    where: and(eq(products.isActive, true), like(products.name, `%${q}%`)),
-    columns: { id: true, name: true, slug: true },
-    with: { images: { limit: 1, orderBy: [asc(productImages.sortOrder)] } },
-    limit,
-  });
-  return rows.map((p) => ({ id: p.id, name: p.name, slug: p.slug, image: p.images[0]?.url ?? null }));
+  const rows = await db
+    .select({ id: products.id, name: products.name, slug: products.slug })
+    .from(products)
+    .where(and(eq(products.isActive, true), like(products.name, `%${q}%`)))
+    .limit(limit);
+
+  if (rows.length === 0) return [];
+
+  const images = await db
+    .select()
+    .from(productImages)
+    .where(inArray(productImages.productId, rows.map((r) => r.id)))
+    .orderBy(asc(productImages.sortOrder));
+  const firstImageByProduct = new Map<number, string>();
+  for (const img of images) {
+    if (!firstImageByProduct.has(img.productId)) firstImageByProduct.set(img.productId, img.url);
+  }
+
+  return rows.map((p) => ({ id: p.id, name: p.name, slug: p.slug, image: firstImageByProduct.get(p.id) ?? null }));
 }
 
 export async function listActiveBanners() {
