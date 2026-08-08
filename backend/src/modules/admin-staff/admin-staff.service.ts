@@ -2,6 +2,7 @@ import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { auditLogs, users, type ROLE, type USER_STATUS } from "../../db/schema";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
+import { indexBy } from "../../lib/batchLoad";
 import * as authService from "../auth/auth.service";
 
 type Role = (typeof ROLE)[number];
@@ -52,16 +53,18 @@ export async function listAuditLog(query: { actorId?: number; entityType?: strin
   ].filter((c): c is NonNullable<typeof c> => c !== undefined);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [items, [{ value: total }]] = await Promise.all([
-    db.query.auditLogs.findMany({
-      where,
-      with: { actor: { columns: { id: true, name: true, email: true, role: true } } },
-      orderBy: [desc(auditLogs.createdAt)],
-      limit: query.limit,
-      offset: (query.page - 1) * query.limit,
-    }),
+  const [rows, [{ value: total }]] = await Promise.all([
+    db.query.auditLogs.findMany({ where, orderBy: [desc(auditLogs.createdAt)], limit: query.limit, offset: (query.page - 1) * query.limit }),
     db.select({ value: count() }).from(auditLogs).where(where),
   ]);
+
+  const actorIds = [...new Set(rows.map((r) => r.actorId).filter((id): id is number => id != null))];
+  const actorRows =
+    actorIds.length > 0
+      ? await db.select({ id: users.id, name: users.name, email: users.email, role: users.role }).from(users).where(inArray(users.id, actorIds))
+      : [];
+  const actorById = indexBy(actorRows, (u) => u.id);
+  const items = rows.map((r) => ({ ...r, actor: r.actorId != null ? actorById.get(r.actorId) ?? null : null }));
 
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }

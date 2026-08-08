@@ -1,7 +1,8 @@
 import { and, count, desc, eq, inArray, like, or, type SQL } from "drizzle-orm";
 import { db } from "../../db";
-import { orders, users, type ACCOUNT_TYPE, type GST_STATUS, type USER_STATUS } from "../../db/schema";
+import { addresses, orders, users, type ACCOUNT_TYPE, type GST_STATUS, type USER_STATUS } from "../../db/schema";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
+import { loadOrderItems } from "../../lib/orderRelations";
 
 type AccountType = (typeof ACCOUNT_TYPE)[number];
 type GstStatus = (typeof GST_STATUS)[number];
@@ -53,15 +54,20 @@ export async function listCustomers(query: ListCustomersQuery) {
 }
 
 export async function getCustomer(id: number) {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, id),
-    with: {
-      addresses: true,
-      orders: { orderBy: [desc(orders.createdAt)], limit: 10, with: { items: true } },
-    },
-  });
+  const user = await db.query.users.findFirst({ where: eq(users.id, id) });
   if (!user || user.role !== "CUSTOMER") throw new NotFoundError("Customer not found");
-  return user;
+
+  const [userAddresses, recentOrders] = await Promise.all([
+    db.select().from(addresses).where(eq(addresses.userId, id)),
+    db.query.orders.findMany({ where: eq(orders.userId, id), orderBy: [desc(orders.createdAt)], limit: 10 }),
+  ]);
+  const itemsByOrder = await loadOrderItems(recentOrders.map((o) => o.id));
+
+  return {
+    ...user,
+    addresses: userAddresses,
+    orders: recentOrders.map((o) => ({ ...o, items: itemsByOrder.get(o.id) ?? [] })),
+  };
 }
 
 export async function decideGstApproval(id: number, decision: GstStatus) {

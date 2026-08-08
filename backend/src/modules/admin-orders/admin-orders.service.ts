@@ -1,18 +1,10 @@
 import { stringify } from "csv-stringify/sync";
-import { and, asc, count, desc, eq, gte, inArray, like, lte, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, like, lte, or, type SQL } from "drizzle-orm";
 import { db } from "../../db";
-import {
-  orderNotes,
-  orderStatusHistory,
-  orders,
-  payments,
-  refunds,
-  returnRequests,
-  users,
-  type ORDER_STATUS,
-  type PAYMENT_STATUS,
-} from "../../db/schema";
+import { orderStatusHistory, orders, payments, refunds, users, type ORDER_STATUS, type PAYMENT_STATUS } from "../../db/schema";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
+import { indexBy } from "../../lib/batchLoad";
+import { loadOrderItems, loadOrderNotes, loadOrderPayments, loadOrderRefunds, loadOrderReturns, loadOrderStatusHistory } from "../../lib/orderRelations";
 
 type OrderStatus = (typeof ORDER_STATUS)[number];
 type PaymentStatus = (typeof PAYMENT_STATUS)[number];
@@ -47,42 +39,53 @@ function buildWhere(query: ListOrdersQuery): SQL | undefined {
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
-function orderUserColumns() {
-  return { id: true as const, name: true as const, phone: true as const, email: true as const };
+async function loadOrderUsers(orderRows: (typeof orders.$inferSelect)[]) {
+  const userIds = [...new Set(orderRows.map((o) => o.userId))];
+  const userRows =
+    userIds.length > 0
+      ? await db.select({ id: users.id, name: users.name, phone: users.phone, email: users.email }).from(users).where(inArray(users.id, userIds))
+      : [];
+  return indexBy(userRows, (u) => u.id);
 }
 
 export async function listOrders(query: ListOrdersQuery) {
   const where = buildWhere(query);
 
-  const [items, [{ value: total }]] = await Promise.all([
-    db.query.orders.findMany({
-      where,
-      with: { items: true, user: { columns: orderUserColumns() } },
-      orderBy: [desc(orders.createdAt)],
-      limit: query.limit,
-      offset: (query.page - 1) * query.limit,
-    }),
+  const [rows, [{ value: total }]] = await Promise.all([
+    db.query.orders.findMany({ where, orderBy: [desc(orders.createdAt)], limit: query.limit, offset: (query.page - 1) * query.limit }),
     db.select({ value: count() }).from(orders).where(where),
   ]);
+
+  const [itemsByOrder, userById] = await Promise.all([loadOrderItems(rows.map((o) => o.id)), loadOrderUsers(rows)]);
+  const items = rows.map((o) => ({ ...o, items: itemsByOrder.get(o.id) ?? [], user: userById.get(o.userId)! }));
 
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 export async function getOrder(id: number) {
-  const order = await db.query.orders.findFirst({
-    where: eq(orders.id, id),
-    with: {
-      items: true,
-      statusHistory: { orderBy: [asc(orderStatusHistory.createdAt)] },
-      notes: { orderBy: [desc(orderNotes.createdAt)] },
-      payments: { orderBy: [desc(payments.createdAt)] },
-      refunds: { orderBy: [desc(refunds.createdAt)] },
-      returns: { orderBy: [desc(returnRequests.createdAt)] },
-      user: { columns: orderUserColumns() },
-    },
-  });
-  if (!order) throw new NotFoundError("Order not found");
-  return order;
+  const row = await db.query.orders.findFirst({ where: eq(orders.id, id) });
+  if (!row) throw new NotFoundError("Order not found");
+
+  const [itemsByOrder, statusHistoryByOrder, notesByOrder, paymentsByOrder, refundsByOrder, returnsByOrder, userById] = await Promise.all([
+    loadOrderItems([id]),
+    loadOrderStatusHistory([id]),
+    loadOrderNotes([id]),
+    loadOrderPayments([id]),
+    loadOrderRefunds([id]),
+    loadOrderReturns([id]),
+    loadOrderUsers([row]),
+  ]);
+
+  return {
+    ...row,
+    items: itemsByOrder.get(id) ?? [],
+    statusHistory: statusHistoryByOrder.get(id) ?? [],
+    notes: notesByOrder.get(id) ?? [],
+    payments: paymentsByOrder.get(id) ?? [],
+    refunds: refundsByOrder.get(id) ?? [],
+    returns: returnsByOrder.get(id) ?? [],
+    user: userById.get(row.userId)!,
+  };
 }
 
 export async function updateOrderStatus(
@@ -153,11 +156,9 @@ export async function initiateRefund(actorId: number, orderId: number, input: { 
 
 export async function exportOrdersCsv(query: ListOrdersQuery): Promise<string> {
   const where = buildWhere(query);
-  const items = await db.query.orders.findMany({
-    where,
-    with: { user: { columns: { name: true, phone: true, email: true } } },
-    orderBy: [desc(orders.createdAt)],
-  });
+  const orderRows = await db.query.orders.findMany({ where, orderBy: [desc(orders.createdAt)] });
+  const userById = await loadOrderUsers(orderRows);
+  const items = orderRows.map((o) => ({ ...o, user: userById.get(o.userId)! }));
 
   const rows = items.map((o) => ({
     orderNumber: o.orderNumber,

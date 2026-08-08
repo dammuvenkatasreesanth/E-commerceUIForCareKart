@@ -1,10 +1,12 @@
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
-import { and, asc, count, eq, like, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, inArray, like, type SQL } from "drizzle-orm";
 import { db } from "../../db";
 import { categories, packPriceTiers, productImages, productSizes, products } from "../../db/schema";
 import { slugify } from "../../lib/slugify";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
+import { attachProductRelations } from "../../lib/productRelations";
+import { groupBy, indexBy } from "../../lib/batchLoad";
 
 interface PackTierInput {
   tierIndex: number;
@@ -34,15 +36,6 @@ async function uniqueSlug(name: string, excludeId?: number): Promise<string> {
   }
 }
 
-function productWith() {
-  return {
-    images: { orderBy: [asc(productImages.sortOrder)] },
-    sizes: { orderBy: [asc(productSizes.sortOrder)] },
-    packTiers: { orderBy: [asc(packPriceTiers.tierIndex)] },
-    category: true as const,
-  };
-}
-
 // Drizzle's .set() writes every key present in the object, even if the value
 // is undefined (unlike Prisma, which treats undefined as "leave unchanged").
 // This filters those out so a partial update only touches the fields the
@@ -65,23 +58,24 @@ export async function listProducts(query: { q?: string; category?: string; inclu
   }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [items, [{ value: total }]] = await Promise.all([
+  const [rows, [{ value: total }]] = await Promise.all([
     db.query.products.findMany({
       where,
-      with: productWith(),
       orderBy: (products, { desc }) => [desc(products.createdAt)],
       limit: query.limit,
       offset: (query.page - 1) * query.limit,
     }),
     db.select({ value: count() }).from(products).where(where),
   ]);
+  const items = await attachProductRelations(rows);
 
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 export async function getProduct(id: number) {
-  const product = await db.query.products.findFirst({ where: eq(products.id, id), with: productWith() });
-  if (!product) throw new NotFoundError("Product not found");
+  const row = await db.query.products.findFirst({ where: eq(products.id, id) });
+  if (!row) throw new NotFoundError("Product not found");
+  const [product] = await attachProductRelations([row]);
   return product;
 }
 
@@ -144,8 +138,10 @@ export async function createProduct(input: ProductInput) {
 }
 
 export async function updateProduct(id: number, input: Partial<ProductInput> & { isActive?: boolean; inStock?: boolean }) {
-  const existing = await db.query.products.findFirst({ where: eq(products.id, id), with: { sizes: true } });
-  if (!existing) throw new NotFoundError("Product not found");
+  const existingRow = await db.query.products.findFirst({ where: eq(products.id, id) });
+  if (!existingRow) throw new NotFoundError("Product not found");
+  const existingSizes = await db.select().from(productSizes).where(eq(productSizes.productId, id)).orderBy(asc(productSizes.sortOrder));
+  const existing = { ...existingRow, sizes: existingSizes };
 
   if (input.categoryId) {
     const category = await db.query.categories.findFirst({ where: eq(categories.id, input.categoryId) });
@@ -371,12 +367,20 @@ export async function importProductsCsv(fileBuffer: Buffer): Promise<{ created: 
 }
 
 export async function exportProductsCsv(): Promise<string> {
-  const items = await db.query.products.findMany({
-    with: { category: true, sizes: true },
-    orderBy: [asc(products.id)],
-  });
+  const rows = await db.query.products.findMany({ orderBy: [asc(products.id)] });
+  if (rows.length === 0) return stringify([], { header: true });
 
-  const rows = items.map((p) => ({
+  const productIds = rows.map((p) => p.id);
+  const categoryIds = [...new Set(rows.map((p) => p.categoryId))];
+  const [sizes, cats] = await Promise.all([
+    db.select().from(productSizes).where(inArray(productSizes.productId, productIds)).orderBy(asc(productSizes.sortOrder)),
+    db.select().from(categories).where(inArray(categories.id, categoryIds)),
+  ]);
+  const sizesByProduct = groupBy(sizes, (s) => s.productId);
+  const categoryById = indexBy(cats, (c) => c.id);
+  const items = rows.map((p) => ({ ...p, category: categoryById.get(p.categoryId)!, sizes: sizesByProduct.get(p.id) ?? [] }));
+
+  const csvRows = items.map((p) => ({
     id: p.id,
     name: p.name,
     category: p.category.name,
@@ -394,5 +398,5 @@ export async function exportProductsCsv(): Promise<string> {
     isActive: p.isActive,
   }));
 
-  return stringify(rows, { header: true });
+  return stringify(csvRows, { header: true });
 }

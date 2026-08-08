@@ -1,40 +1,13 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or, type SQL } from "drizzle-orm";
 import { db } from "../../db";
-import { banners, categories, packPriceTiers, productImages, productSizes, products, reviews, users } from "../../db/schema";
+import { banners, categories, productImages, productSizes, products, reviews, users } from "../../db/schema";
 import { NotFoundError } from "../../lib/errors";
-import { groupBy, indexBy } from "../../lib/batchLoad";
+import { indexBy } from "../../lib/batchLoad";
+import { attachProductRelations } from "../../lib/productRelations";
 import type { listProductsQuerySchema } from "./catalog.schema";
 import type { z } from "zod";
 
 type ListProductsQuery = z.infer<typeof listProductsQuerySchema>;
-type ProductRow = typeof products.$inferSelect;
-
-async function attachProductRelations(rows: ProductRow[]) {
-  if (rows.length === 0) return [];
-
-  const productIds = rows.map((r) => r.id);
-  const categoryIds = [...new Set(rows.map((r) => r.categoryId))];
-
-  const [images, sizes, tiers, cats] = await Promise.all([
-    db.select().from(productImages).where(inArray(productImages.productId, productIds)).orderBy(asc(productImages.sortOrder)),
-    db.select().from(productSizes).where(inArray(productSizes.productId, productIds)).orderBy(asc(productSizes.sortOrder)),
-    db.select().from(packPriceTiers).where(inArray(packPriceTiers.productId, productIds)).orderBy(asc(packPriceTiers.tierIndex)),
-    db.select().from(categories).where(inArray(categories.id, categoryIds)),
-  ]);
-
-  const imagesByProduct = groupBy(images, (i) => i.productId);
-  const sizesByProduct = groupBy(sizes, (s) => s.productId);
-  const tiersByProduct = groupBy(tiers, (t) => t.productId);
-  const categoryById = indexBy(cats, (c) => c.id);
-
-  return rows.map((r) => ({
-    ...r,
-    images: imagesByProduct.get(r.id) ?? [],
-    sizes: sizesByProduct.get(r.id) ?? [],
-    packTiers: tiersByProduct.get(r.id) ?? [],
-    category: categoryById.get(r.categoryId)!,
-  }));
-}
 
 function sortToOrderBy(sort: ListProductsQuery["sort"]) {
   switch (sort) {
