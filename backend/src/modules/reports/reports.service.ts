@@ -71,27 +71,45 @@ export async function getSalesTrend(days: number) {
   }));
 }
 
+// Plain LEFT JOINs (not Drizzle's relational with: API, which generates LEFT
+// JOIN LATERAL — unsupported on production's MariaDB), since these only need
+// a single flat "one" attribute from users, not a nested "many" collection.
 export async function getPendingOrderAlerts() {
-  return db.query.orders.findMany({
-    where: eq(orders.status, "PENDING"),
-    columns: { id: true, orderNumber: true, createdAt: true, totalAmount: true },
-    with: { user: { columns: { name: true, phone: true } } },
-    orderBy: [asc(orders.createdAt)],
-    limit: 50,
-  });
+  return db
+    .select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      createdAt: orders.createdAt,
+      totalAmount: orders.totalAmount,
+      user: { name: users.name, phone: users.phone },
+    })
+    .from(orders)
+    .leftJoin(users, eq(orders.userId, users.id))
+    .where(eq(orders.status, "PENDING"))
+    .orderBy(asc(orders.createdAt))
+    .limit(50);
 }
 
 export async function exportSalesCsv() {
-  const items = await db.query.orders.findMany({
-    where: inArray(orders.status, REVENUE_STATUSES),
-    with: { user: { columns: { name: true, email: true } } },
-    orderBy: [desc(orders.placedAt)],
-  });
+  const items = await db
+    .select({
+      orderNumber: orders.orderNumber,
+      status: orders.status,
+      totalAmount: orders.totalAmount,
+      placedAt: orders.placedAt,
+      customerName: users.name,
+      customerEmail: users.email,
+    })
+    .from(orders)
+    .leftJoin(users, eq(orders.userId, users.id))
+    .where(inArray(orders.status, REVENUE_STATUSES))
+    .orderBy(desc(orders.placedAt));
+
   return stringify(
     items.map((o) => ({
       orderNumber: o.orderNumber,
-      customer: o.user.name ?? "",
-      email: o.user.email ?? "",
+      customer: o.customerName ?? "",
+      email: o.customerEmail ?? "",
       status: o.status,
       total: o.totalAmount.toString(),
       placedAt: o.placedAt.toISOString(),
