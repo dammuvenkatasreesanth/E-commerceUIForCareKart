@@ -24,9 +24,8 @@
 
 ```bash
 npm install
-npx prisma migrate deploy   # applies any new migrations, never touches existing data
 npm run build                # compiles TypeScript to dist/
-npm run prisma:seed          # safe to re-run — only creates the bootstrap admin/categories/coupons if missing
+npm run db:seed               # safe to re-run — only creates the bootstrap admin/categories/coupons if missing
 npm start                    # or let Hostinger's process manager run `node dist/src/server.js`
 ```
 
@@ -34,6 +33,7 @@ Set Hostinger's Node app entry point to `dist/src/server.js` and its startup com
 
 ## Notes
 
+- The backend talks to MySQL via Drizzle ORM + the `mysql2` driver — a plain Node.js TCP client with no native/Rust runtime. There is no `prisma generate`/`prisma migrate` step; schema changes are applied directly against the database (see `backend/src/db/schema.ts` for the current schema, and `backend/prisma/migrations/` for the historical SQL log from when this project used Prisma).
 - Product/category/banner images and product videos go straight to Cloudflare R2 — nothing is written to local disk, so this survives redeploys regardless of whether the platform preserves the app's working directory between deploys.
 - The in-process payment reconciliation sweep and any other background timers only run in the single Node process — this deployment assumes one instance, not a multi-instance/load-balanced setup.
 - `trust proxy` is enabled automatically when `NODE_ENV=production`, which is required for rate limiting and `req.ip` to see the real client IP behind Hostinger's reverse proxy.

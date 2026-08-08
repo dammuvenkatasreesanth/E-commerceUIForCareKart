@@ -27,3 +27,4 @@ if (env.NODE_ENV !== "production") {
 }
 
 export const db = drizzle(pool, { schema, mode: "default" });
+export const dbPool = pool;

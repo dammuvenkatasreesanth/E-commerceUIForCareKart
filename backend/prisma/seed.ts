@@ -1,8 +1,8 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { count, eq } from "drizzle-orm";
+import { db, dbPool } from "../src/db";
+import { banners, categories, coupons, packPriceTiers, productImages, productSizes, products, users } from "../src/db/schema";
 
 function slugify(name: string): string {
   return name
@@ -272,16 +272,14 @@ async function seedAdmin() {
     process.exit(1);
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (existing) {
     console.log(`Bootstrap admin already exists: ${email}`);
     return;
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  await prisma.user.create({
-    data: { email, name, passwordHash, role: "ADMIN", status: "ACTIVE", claimedAt: new Date() },
-  });
+  await db.insert(users).values({ email, name, passwordHash, role: "ADMIN", status: "ACTIVE", claimedAt: new Date(), updatedAt: new Date() });
   console.log(`Bootstrap admin created: ${email} / (password from BOOTSTRAP_ADMIN_PASSWORD)`);
 }
 
@@ -290,64 +288,70 @@ async function seedCatalog() {
 
   for (const [index, name] of CATEGORY_NAMES.entries()) {
     const slug = slugify(name);
-    const category = await prisma.category.upsert({
-      where: { slug },
-      update: {},
-      create: { name, slug, sortOrder: index, imageUrl: CATEGORY_IMAGES[name], showOnHomepage: true },
-    });
-    categoryBySlug.set(name, category.id);
+    let category = await db.query.categories.findFirst({ where: eq(categories.slug, slug) });
+    if (!category) {
+      const [{ id }] = await db
+        .insert(categories)
+        .values({ name, slug, sortOrder: index, imageUrl: CATEGORY_IMAGES[name], showOnHomepage: true, updatedAt: new Date() })
+        .$returningId();
+      category = await db.query.categories.findFirst({ where: eq(categories.id, id) });
+    }
+    categoryBySlug.set(name, category!.id);
   }
   console.log(`Seeded ${categoryBySlug.size} categories`);
 
   let createdCount = 0;
   for (const p of SEED_PRODUCTS) {
     const slug = slugify(p.name);
-    const existing = await prisma.product.findUnique({ where: { slug } });
+    const existing = await db.query.products.findFirst({ where: eq(products.slug, slug) });
     if (existing) continue;
 
     const categoryId = categoryBySlug.get(p.category);
     if (!categoryId) throw new Error(`Unknown category "${p.category}" for product "${p.name}"`);
 
-    await prisma.product.create({
-      data: {
-        slug,
-        name: p.name,
-        tagline: p.tagline,
-        description: p.description,
-        categoryId,
-        price: p.price,
-        mrp: p.mrp,
-        material: p.material,
-        badge: p.badge || null,
-        features: p.features,
-        specs: p.specs,
-        moq: p.moq,
-        inStock: p.inStock,
-        ratingAvg: p.ratingAvg,
-        ratingCount: p.ratingCount,
-        images: {
-          create: (PRODUCT_IMAGES[p.name] ?? [0, 1, 2, 3].map((i) => placeholderImage(`${p.name} ${i + 1}`))).map((url, i) => ({ url, sortOrder: i })),
-        },
-        sizes: {
-          create: p.sizes.map((size, i) => ({ size, sortOrder: i })),
-        },
-        packTiers: {
-          create: PACK_LABELS.map((label, i) => ({
-            tierIndex: i,
-            label,
-            packQty: PACK_QTY[i],
-            discountPct: p.packDiscounts[i] ?? 0,
-          })),
-        },
-      },
+    await db.transaction(async (tx) => {
+      const [{ id }] = await tx
+        .insert(products)
+        .values({
+          slug,
+          name: p.name,
+          tagline: p.tagline,
+          description: p.description,
+          categoryId,
+          price: String(p.price),
+          mrp: String(p.mrp),
+          material: p.material,
+          badge: p.badge || null,
+          features: p.features,
+          specs: p.specs,
+          moq: p.moq,
+          inStock: p.inStock,
+          ratingAvg: String(p.ratingAvg),
+          ratingCount: p.ratingCount,
+          updatedAt: new Date(),
+        })
+        .$returningId();
+
+      const images = PRODUCT_IMAGES[p.name] ?? [0, 1, 2, 3].map((i) => placeholderImage(`${p.name} ${i + 1}`));
+      await tx.insert(productImages).values(images.map((url, i) => ({ productId: id, url, sortOrder: i })));
+      await tx.insert(productSizes).values(p.sizes.map((size, i) => ({ productId: id, size, sortOrder: i })));
+      await tx.insert(packPriceTiers).values(
+        PACK_LABELS.map((label, i) => ({
+          productId: id,
+          tierIndex: i,
+          label,
+          packQty: PACK_QTY[i],
+          discountPct: String(p.packDiscounts[i] ?? 0),
+        })),
+      );
     });
     createdCount += 1;
   }
   console.log(`Seeded ${createdCount} new products (${SEED_PRODUCTS.length - createdCount} already existed)`);
 
-  const bannerCount = await prisma.banner.count();
+  const [{ value: bannerCount }] = await db.select({ value: count() }).from(banners);
   if (bannerCount === 0) {
-    await prisma.banner.createMany({ data: SEED_BANNERS });
+    await db.insert(banners).values(SEED_BANNERS);
     console.log(`Seeded ${SEED_BANNERS.length} banners`);
   } else {
     console.log("Banners already seeded, skipping");
@@ -355,17 +359,15 @@ async function seedCatalog() {
 }
 
 async function seedCoupons() {
-  const count = await prisma.coupon.count();
-  if (count > 0) {
+  const [{ value: couponCount }] = await db.select({ value: count() }).from(coupons);
+  if (couponCount > 0) {
     console.log("Coupons already seeded, skipping");
     return;
   }
-  await prisma.coupon.createMany({
-    data: [
-      { code: "WELCOME10", type: "PERCENT", value: 10, minOrderAmount: 0, isActive: true },
-      { code: "FLAT100", type: "FLAT", value: 100, minOrderAmount: 500, isActive: true },
-    ],
-  });
+  await db.insert(coupons).values([
+    { code: "WELCOME10", type: "PERCENT", value: "10", minOrderAmount: "0", isActive: true },
+    { code: "FLAT100", type: "FLAT", value: "100", minOrderAmount: "500", isActive: true },
+  ]);
   console.log("Seeded 2 coupons");
 }
 
@@ -381,5 +383,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await dbPool.end();
   });

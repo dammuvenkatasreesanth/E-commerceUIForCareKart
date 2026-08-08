@@ -1,8 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
-import type { Role } from "@prisma/client";
+import { eq } from "drizzle-orm";
 import { verifyAccessToken } from "../lib/jwt";
 import { UnauthorizedError, ForbiddenError } from "../lib/errors";
-import { prisma } from "../lib/prisma";
+import { db } from "../db";
+import { users, type ROLE } from "../db/schema";
+
+type Role = (typeof ROLE)[number];
 
 declare global {
   namespace Express {
@@ -21,7 +24,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     const token = header.slice("Bearer ".length);
     const payload = verifyAccessToken(token);
 
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    const user = await db.query.users.findFirst({ where: eq(users.id, payload.sub) });
     if (!user) throw new UnauthorizedError("User no longer exists");
     if (user.status === "BLOCKED" || user.status === "SUSPENDED") {
       throw new ForbiddenError("Account is blocked or suspended");

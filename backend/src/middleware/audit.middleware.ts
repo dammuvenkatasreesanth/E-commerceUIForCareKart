@@ -1,5 +1,5 @@
-import type { Prisma } from "@prisma/client";
-import { prisma } from "../lib/prisma";
+import { db } from "../db";
+import { auditLogs } from "../db/schema";
 
 interface AuditParams {
   actorId?: number | null;
@@ -11,14 +11,12 @@ interface AuditParams {
 }
 
 export async function writeAudit(params: AuditParams): Promise<void> {
-  await prisma.auditLog.create({
-    data: {
-      actorId: params.actorId ?? null,
-      action: params.action,
-      entityType: params.entityType,
-      entityId: params.entityId ?? null,
-      metadata: (params.metadata as Prisma.InputJsonValue) ?? undefined,
-      ipAddress: params.ipAddress ?? null,
-    },
+  await db.insert(auditLogs).values({
+    actorId: params.actorId ?? null,
+    action: params.action,
+    entityType: params.entityType,
+    entityId: params.entityId ?? null,
+    metadata: params.metadata ?? null,
+    ipAddress: params.ipAddress ?? null,
   });
 }

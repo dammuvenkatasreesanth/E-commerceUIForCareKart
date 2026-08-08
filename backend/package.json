@@ -5,20 +5,13 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "postinstall": "prisma generate && npm run build",
+    "postinstall": "npm run build",
     "start": "node dist/src/server.js",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "tsx prisma/seed.ts"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1102.0",
     "@phonepe-pg/pg-sdk-node": "^2.0.6",
-    "@prisma/client": "^5.20.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
@@ -48,16 +41,12 @@
     "pdfkit": "^0.15.0",
     "pino": "^9.4.0",
     "pino-http": "^10.3.0",
-    "prisma": "^5.20.0",
     "tsx": "^4.23.1",
     "typescript": "^5.6.2",
     "zod": "^3.23.8"
   },
   "allowScripts": {
-    "@prisma/client@5.20.0": true,
-    "@prisma/engines@5.20.0": true,
-    "esbuild@0.28.1": true,
-    "prisma@5.20.0": true
+    "esbuild@0.28.1": true
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10"

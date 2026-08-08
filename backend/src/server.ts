@@ -1,7 +1,7 @@
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { logger } from "./lib/logger";
-import { prisma } from "./lib/prisma";
+import { dbPool } from "./db";
 import { sweepStalePayments } from "./modules/payments/payments.service";
 
 const app = createApp();
@@ -19,7 +19,7 @@ paymentSweepInterval.unref();
 async function shutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down gracefully...`);
   server.close(async () => {
-    await prisma.$disconnect();
+    await dbPool.end();
     process.exit(0);
   });
   setTimeout(() => process.exit(1), 10_000).unref();
