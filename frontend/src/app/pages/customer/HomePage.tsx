@@ -66,7 +66,7 @@ export function HomePage() {
         </div>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
           {cats.map(cat => (
-            <button key={cat.id} onClick={() => navigate("/products")} className="group flex flex-col items-center gap-2">
+            <button key={cat.id} onClick={() => navigate(`/products?category=${cat.slug}`)} className="group flex flex-col items-center gap-2">
               <div className="w-full aspect-square rounded-2xl overflow-hidden relative bg-muted">
                 <ImageWithFallback src={cat.imageUrl ?? undefined} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />

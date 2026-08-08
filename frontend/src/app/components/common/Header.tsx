@@ -8,9 +8,8 @@ import {
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { Logo } from "../Logo";
 import { UserAvatar } from "./UserAvatar";
-import { CATEGORIES } from "../../lib/constants";
 import type { AuthUser } from "../../types/user";
-import { useAutosuggest } from "../../hooks/useCatalog";
+import { useAutosuggest, useCategories } from "../../hooks/useCatalog";
 
 export function Header({ cartCount, isLoggedIn, currentUser, searchQuery, setSearchQuery }: {
   cartCount: number;
@@ -31,6 +30,9 @@ export function Header({ cartCount, isLoggedIn, currentUser, searchQuery, setSea
   const trimmed = searchQuery.trim().toLowerCase();
   const { data: suggestionData } = useAutosuggest(searchQuery);
   const suggestions = trimmed.length >= 1 ? (suggestionData ?? []).slice(0, 6) : [];
+  const { data: categories } = useCategories();
+
+  const goToCategory = (slug: string) => navigate(`/products?category=${slug}`);
 
   const showDropdown = focused && trimmed.length >= 1;
 
@@ -90,8 +92,6 @@ export function Header({ cartCount, isLoggedIn, currentUser, searchQuery, setSea
     { label: "My Cart", icon: ShoppingCart, to: "/cart", highlight: cartCount > 0 },
     { label: isLoggedIn ? "My Account" : "Login", icon: User, to: isLoggedIn ? "/account" : "/login" },
   ];
-
-  const sideCategories = CATEGORIES.slice(1);
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-border shadow-sm">
@@ -153,14 +153,14 @@ export function Header({ cartCount, isLoggedIn, currentUser, searchQuery, setSea
               {/* Categories */}
               <div className="px-3 mb-4">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-2 mb-1.5">Categories</p>
-                {sideCategories.map((cat) => (
+                {(categories ?? []).map((cat) => (
                   <button
-                    key={cat}
-                    onClick={() => { navigate("/products"); setSideMenuOpen(false); }}
+                    key={cat.id}
+                    onClick={() => { goToCategory(cat.slug); setSideMenuOpen(false); }}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-0.5 hover:bg-muted text-left transition-colors group"
                   >
                     <Tag className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
-                    <span className="text-sm font-medium text-foreground">{cat}</span>
+                    <span className="text-sm font-medium text-foreground">{cat.name}</span>
                   </button>
                 ))}
               </div>
@@ -341,7 +341,7 @@ export function Header({ cartCount, isLoggedIn, currentUser, searchQuery, setSea
 
       <div className="hidden md:block border-t border-border">
         <div className="max-w-6xl mx-auto px-4 flex gap-6 overflow-x-auto py-2">
-          {CATEGORIES.slice(1).map(c => <button key={c} onClick={() => navigate("/products")} className="text-muted-foreground hover:text-primary whitespace-nowrap font-medium transition-colors text-xs">{c}</button>)}
+          {(categories ?? []).map(c => <button key={c.id} onClick={() => goToCategory(c.slug)} className="text-muted-foreground hover:text-primary whitespace-nowrap font-medium transition-colors text-xs">{c.name}</button>)}
         </div>
       </div>
     </header>

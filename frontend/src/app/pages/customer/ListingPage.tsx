@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import { Search, X, Filter } from "lucide-react";
 import { ProductCard } from "../../components/common/ProductCard";
 import { useLegacyStore } from "../../context/LegacyStoreContext";
@@ -15,8 +16,13 @@ const SORT_TO_QUERY: Record<string, ProductListQuery["sort"]> = {
 export function ListingPage() {
   const { searchQuery, setSearchQuery } = useLegacyStore();
   const { data: categories } = useCategories();
-  // null = "All" — no category filter applied.
-  const [activeCategorySlug, setActiveCategorySlug] = useState<string | null>(null);
+  // Category filter lives in the URL (?category=slug) so links from the navbar
+  // and other pages can deep-link straight into a filtered listing — null = "All".
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeCategorySlug = searchParams.get("category");
+  const setActiveCategorySlug = (slug: string | null) => {
+    setSearchParams(slug ? { category: slug } : {});
+  };
   const [sortBy, setSortBy] = useState("popular");
 
   const q = searchQuery.trim();

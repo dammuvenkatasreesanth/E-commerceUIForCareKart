@@ -1,4 +1,3 @@
-export const CATEGORIES = ["All", "Nitrile", "Latex", "Vinyl", "Masks", "Face Protection", "Hygiene", "PPE Kits", "Lab Coats"];
 export const PACK_LABELS = ["Single Unit", "Box · 100 units", "Box · 500 units", "Pallet · 1000+"];
 export const PACK_QTY = [1, 100, 500, 1000];
 
