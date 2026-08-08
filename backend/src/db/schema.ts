@@ -20,8 +20,9 @@ export const CAMPAIGN_STATUS = ["DRAFT", "SCHEDULED", "SENDING", "SENT", "FAILED
 export const REVIEW_STATUS = ["PENDING", "APPROVED", "REJECTED"] as const;
 
 const createdAt = () => datetime("createdAt", { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`);
-// Prisma's @updatedAt is enforced client-side (no MySQL ON UPDATE clause exists on
-// the live table) — callers must pass `updatedAt: new Date()` explicitly on every update.
+// Prisma's @updatedAt is enforced entirely client-side — the live column has
+// no MySQL DEFAULT or ON UPDATE clause — so callers MUST pass
+// `updatedAt: new Date()` explicitly on every insert AND update.
 const updatedAt = () => datetime("updatedAt", { fsp: 3 }).notNull();
 
 // ── Identity ────────────────────────────────────────────────────────────

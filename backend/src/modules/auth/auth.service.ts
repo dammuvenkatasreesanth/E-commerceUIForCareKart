@@ -1,7 +1,9 @@
 import bcrypt from "bcryptjs";
 import axios from "axios";
 import { OAuth2Client } from "google-auth-library";
-import { prisma } from "../../lib/prisma";
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "../../db";
+import { users, refreshTokens, emailVerificationTokens, staffInvites, passwordResetTokens } from "../../db/schema";
 import {
   signAccessToken,
   generateRefreshTokenValue,
@@ -18,7 +20,10 @@ import {
   STAFF_INVITE_TTL_HOURS,
   EMAIL_VERIFICATION_TTL_HOURS,
 } from "../../config/constants";
-import type { Role, User } from "@prisma/client";
+
+type Role = "CUSTOMER" | "ADMIN" | "EMPLOYEE";
+type User = typeof users.$inferSelect;
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 interface SessionMeta {
   userAgent?: string;
@@ -34,29 +39,31 @@ async function issueSession(userId: number, role: Role, meta: SessionMeta): Prom
   const accessToken = signAccessToken({ sub: userId, role });
   const refreshToken = generateRefreshTokenValue();
 
-  await prisma.refreshToken.create({
-    data: {
-      userId,
-      tokenHash: hashToken(refreshToken),
-      userAgent: meta.userAgent,
-      createdByIp: meta.ip,
-      expiresAt: refreshTokenExpiry(),
-    },
+  await db.insert(refreshTokens).values({
+    userId,
+    tokenHash: hashToken(refreshToken),
+    userAgent: meta.userAgent,
+    createdByIp: meta.ip,
+    expiresAt: refreshTokenExpiry(),
   });
 
   return { accessToken, refreshToken };
+}
+
+async function getUserById(id: number, tx: DbTx | typeof db = db): Promise<User> {
+  const user = await tx.query.users.findFirst({ where: eq(users.id, id) });
+  if (!user) throw new UnauthorizedError("User no longer exists.");
+  return user;
 }
 
 // ── Customer: email + password ────────────────────────────────────────────
 
 export async function sendVerificationEmail(userId: number, email: string, name: string): Promise<void> {
   const token = generateRefreshTokenValue();
-  await prisma.emailVerificationToken.create({
-    data: {
-      userId,
-      tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_HOURS * 60 * 60 * 1000),
-    },
+  await db.insert(emailVerificationTokens).values({
+    userId,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_HOURS * 60 * 60 * 1000),
   });
 
   const verifyUrl = `${env.STAFF_APP_URL}/verify-email?token=${token}`;
@@ -65,19 +72,20 @@ export async function sendVerificationEmail(userId: number, email: string, name:
 }
 
 export async function customerSignup(input: { name: string; email: string; password: string }): Promise<void> {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  const existing = await db.query.users.findFirst({ where: eq(users.email, input.email) });
   if (existing) throw new ConflictError("An account with this email already exists.");
 
   const passwordHash = await bcrypt.hash(input.password, 12);
-  const user = await prisma.user.create({
-    data: { email: input.email, name: input.name, passwordHash, role: "CUSTOMER", status: "ACTIVE", emailVerified: false },
-  });
+  const [{ id }] = await db
+    .insert(users)
+    .values({ email: input.email, name: input.name, passwordHash, role: "CUSTOMER", status: "ACTIVE", emailVerified: false, updatedAt: new Date() })
+    .$returningId();
 
-  await sendVerificationEmail(user.id, user.email!, user.name ?? "");
+  await sendVerificationEmail(id, input.email, input.name);
 }
 
 export async function resendVerificationEmail(email: string): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!user || user.emailVerified) return; // don't leak existence; no-op if already verified
   await sendVerificationEmail(user.id, email, user.name ?? "");
 }
@@ -86,17 +94,15 @@ export async function verifyEmail(
   token: string,
   meta: SessionMeta,
 ): Promise<TokenPair & { user: User; isNewUser: boolean }> {
-  const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash: hashToken(token) } });
+  const record = await db.query.emailVerificationTokens.findFirst({ where: eq(emailVerificationTokens.tokenHash, hashToken(token)) });
   if (!record) throw new BadRequestError("Invalid or expired verification link.");
   if (record.consumedAt) throw new BadRequestError("This verification link has already been used.");
   if (record.expiresAt < new Date()) throw new BadRequestError("This verification link has expired.");
 
-  const user = await prisma.$transaction(async (tx) => {
-    await tx.emailVerificationToken.update({ where: { id: record.id }, data: { consumedAt: new Date() } });
-    return tx.user.update({
-      where: { id: record.userId },
-      data: { emailVerified: true, emailVerifiedAt: new Date(), lastLoginAt: new Date() },
-    });
+  const user = await db.transaction(async (tx) => {
+    await tx.update(emailVerificationTokens).set({ consumedAt: new Date() }).where(eq(emailVerificationTokens.id, record.id));
+    await tx.update(users).set({ emailVerified: true, emailVerifiedAt: new Date(), lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, record.userId));
+    return getUserById(record.userId, tx);
   });
 
   const tokens = await issueSession(user.id, user.role, meta);
@@ -104,7 +110,7 @@ export async function verifyEmail(
 }
 
 export async function customerLogin(email: string, password: string, meta: SessionMeta): Promise<TokenPair & { user: User }> {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
   if (user.status === "BLOCKED" || user.status === "SUSPENDED") {
     throw new ForbiddenError("This account has been blocked or suspended.");
@@ -117,7 +123,7 @@ export async function customerLogin(email: string, password: string, meta: Sessi
     throw new ForbiddenError("Please verify your email before logging in. Check your inbox for the verification link.");
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await db.update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, user.id));
   const tokens = await issueSession(user.id, user.role, meta);
   return { ...tokens, user };
 }
@@ -139,36 +145,32 @@ interface OAuthProfile {
 // email-verification link. Callers must reject unverified provider emails
 // before reaching this function.
 async function linkOrCreateOAuthUser(profile: OAuthProfile, meta: SessionMeta): Promise<TokenPair & { user: User; isNewUser: boolean }> {
-  const idField = profile.provider === "google" ? "googleId" : "facebookId";
+  const providerColumn = profile.provider === "google" ? users.googleId : users.facebookId;
+  const providerIdField = profile.provider === "google" ? { googleId: profile.providerId } : { facebookId: profile.providerId };
 
-  let user = await prisma.user.findUnique({ where: { [idField]: profile.providerId } as never });
+  let user = await db.query.users.findFirst({ where: eq(providerColumn, profile.providerId) });
   let isNewUser = false;
+  let userId: number;
 
-  if (!user) {
-    const existingByEmail = await prisma.user.findUnique({ where: { email: profile.email } });
+  if (user) {
+    userId = user.id;
+  } else {
+    const existingByEmail = await db.query.users.findFirst({ where: eq(users.email, profile.email) });
     if (existingByEmail) {
-      user = await prisma.user.update({
-        where: { id: existingByEmail.id },
-        data: {
-          [idField]: profile.providerId,
-          emailVerified: true,
-          emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(),
-        },
-      });
+      await db
+        .update(users)
+        .set({ ...providerIdField, emailVerified: true, emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(), updatedAt: new Date() })
+        .where(eq(users.id, existingByEmail.id));
+      userId = existingByEmail.id;
     } else {
-      user = await prisma.user.create({
-        data: {
-          email: profile.email,
-          name: profile.name,
-          role: "CUSTOMER",
-          status: "ACTIVE",
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-          [idField]: profile.providerId,
-        },
-      });
+      const [{ id }] = await db
+        .insert(users)
+        .values({ email: profile.email, name: profile.name, role: "CUSTOMER", status: "ACTIVE", emailVerified: true, emailVerifiedAt: new Date(), updatedAt: new Date(), ...providerIdField })
+        .$returningId();
+      userId = id;
       isNewUser = true;
     }
+    user = await getUserById(userId);
   }
 
   if (user.status === "BLOCKED" || user.status === "SUSPENDED") {
@@ -177,10 +179,12 @@ async function linkOrCreateOAuthUser(profile: OAuthProfile, meta: SessionMeta): 
 
   // Keeps the profile photo in sync with the provider on every login, not just
   // on first sign-up — matches whatever the user currently has set there.
-  user = await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date(), avatarUrl: profile.avatarUrl ?? user.avatarUrl },
-  });
+  await db
+    .update(users)
+    .set({ lastLoginAt: new Date(), avatarUrl: profile.avatarUrl ?? user.avatarUrl, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+  user = await getUserById(userId);
+
   const tokens = await issueSession(user.id, user.role, meta);
   return { ...tokens, user, isNewUser };
 }
@@ -237,7 +241,7 @@ export async function facebookLogin(
 // ── Staff: email + password ────────────────────────────────────────────
 
 export async function staffLogin(email: string, password: string, meta: SessionMeta): Promise<TokenPair & { user: User }> {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!user || !user.passwordHash) throw new UnauthorizedError("Invalid email or password.");
   if (user.status === "BLOCKED" || user.status === "SUSPENDED") {
     throw new ForbiddenError("This account has been blocked or suspended.");
@@ -249,24 +253,22 @@ export async function staffLogin(email: string, password: string, meta: SessionM
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError("Invalid email or password.");
 
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await db.update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, user.id));
   const tokens = await issueSession(user.id, user.role, meta);
   return { ...tokens, user };
 }
 
 export async function acceptStaffInvite(token: string, password: string, meta: SessionMeta): Promise<TokenPair & { user: User }> {
-  const invite = await prisma.staffInvite.findUnique({ where: { tokenHash: hashToken(token) } });
+  const invite = await db.query.staffInvites.findFirst({ where: eq(staffInvites.tokenHash, hashToken(token)) });
   if (!invite) throw new BadRequestError("Invalid or expired invite link.");
   if (invite.acceptedAt) throw new BadRequestError("This invite has already been used.");
   if (invite.expiresAt < new Date()) throw new BadRequestError("This invite link has expired.");
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await prisma.$transaction(async (tx) => {
-    await tx.staffInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
-    return tx.user.update({
-      where: { id: invite.userId },
-      data: { passwordHash, status: "ACTIVE", claimedAt: new Date() },
-    });
+  const user = await db.transaction(async (tx) => {
+    await tx.update(staffInvites).set({ acceptedAt: new Date() }).where(eq(staffInvites.id, invite.id));
+    await tx.update(users).set({ passwordHash, status: "ACTIVE", claimedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, invite.userId));
+    return getUserById(invite.userId, tx);
   });
 
   const tokens = await issueSession(user.id, user.role, meta);
@@ -277,24 +279,23 @@ export async function createStaffInvite(
   issuedById: number,
   input: { email: string; name: string; role: Extract<Role, "ADMIN" | "EMPLOYEE"> },
 ): Promise<User> {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  const existing = await db.query.users.findFirst({ where: eq(users.email, input.email) });
   if (existing) throw new ConflictError("A user with this email already exists");
 
   const token = generateRefreshTokenValue();
 
-  const user = await prisma.$transaction(async (tx) => {
-    const created = await tx.user.create({
-      data: { email: input.email, name: input.name, role: input.role, status: "PENDING_CLAIM" },
+  const user = await db.transaction(async (tx) => {
+    const [{ id }] = await tx
+      .insert(users)
+      .values({ email: input.email, name: input.name, role: input.role, status: "PENDING_CLAIM", updatedAt: new Date() })
+      .$returningId();
+    await tx.insert(staffInvites).values({
+      userId: id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + STAFF_INVITE_TTL_HOURS * 60 * 60 * 1000),
+      issuedById,
     });
-    await tx.staffInvite.create({
-      data: {
-        userId: created.id,
-        tokenHash: hashToken(token),
-        expiresAt: new Date(Date.now() + STAFF_INVITE_TTL_HOURS * 60 * 60 * 1000),
-        issuedById,
-      },
-    });
-    return created;
+    return getUserById(id, tx);
   });
 
   const acceptUrl = `${env.STAFF_APP_URL}/staff/accept-invite?token=${token}`;
@@ -310,16 +311,14 @@ export async function createStaffInvite(
 // name — the frontend is one SPA serving both customer and staff routes —
 // so it's reused as-is for customer links too, no separate env var needed.
 export async function forgotPassword(email: string, resetPathPrefix: string): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!user || !user.passwordHash) return; // don't leak whether the email exists
 
   const token = generateRefreshTokenValue();
-  await prisma.passwordResetToken.create({
-    data: {
-      userId: user.id,
-      tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_HOURS * 60 * 60 * 1000),
-    },
+  await db.insert(passwordResetTokens).values({
+    userId: user.id,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_HOURS * 60 * 60 * 1000),
   });
 
   const resetUrl = `${env.STAFF_APP_URL}${resetPathPrefix}?token=${token}`;
@@ -330,77 +329,63 @@ export async function forgotPassword(email: string, resetPathPrefix: string): Pr
 }
 
 export async function resetPassword(token: string, password: string): Promise<void> {
-  const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
+  const resetToken = await db.query.passwordResetTokens.findFirst({ where: eq(passwordResetTokens.tokenHash, hashToken(token)) });
   if (!resetToken) throw new BadRequestError("Invalid or expired reset link.");
   if (resetToken.consumedAt) throw new BadRequestError("This reset link has already been used.");
   if (resetToken.expiresAt < new Date()) throw new BadRequestError("This reset link has expired.");
 
   const passwordHash = await bcrypt.hash(password, 12);
-  await prisma.$transaction([
-    prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { consumedAt: new Date() } }),
-    prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
-    prisma.refreshToken.updateMany({
-      where: { userId: resetToken.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    }),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.update(passwordResetTokens).set({ consumedAt: new Date() }).where(eq(passwordResetTokens.id, resetToken.id));
+    await tx.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, resetToken.userId));
+    await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, resetToken.userId), isNull(refreshTokens.revokedAt)));
+  });
 }
 
 // ── Shared session management ────────────────────────────────────────────
 
 export async function rotateRefreshToken(refreshToken: string, meta: SessionMeta): Promise<TokenPair> {
   const tokenHash = hashToken(refreshToken);
-  const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+  const existing = await db.query.refreshTokens.findFirst({ where: eq(refreshTokens.tokenHash, tokenHash) });
 
   if (!existing) throw new UnauthorizedError("Invalid refresh token.");
 
   if (existing.revokedAt) {
     // Reuse of an already-rotated token: possible theft — kill the whole session family.
-    await prisma.refreshToken.updateMany({
-      where: { userId: existing.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    await db.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, existing.userId), isNull(refreshTokens.revokedAt)));
     throw new UnauthorizedError("Session invalidated. Please log in again.");
   }
 
   if (existing.expiresAt < new Date()) throw new UnauthorizedError("Refresh token expired. Please log in again.");
 
-  const user = await prisma.user.findUnique({ where: { id: existing.userId } });
+  const user = await db.query.users.findFirst({ where: eq(users.id, existing.userId) });
   if (!user) throw new UnauthorizedError("User no longer exists.");
   if (user.status === "BLOCKED" || user.status === "SUSPENDED") throw new ForbiddenError("Account is blocked.");
 
   const newAccessToken = signAccessToken({ sub: user.id, role: user.role });
   const newRefreshTokenValue = generateRefreshTokenValue();
 
-  const newRow = await prisma.refreshToken.create({
-    data: {
+  const [{ id: newRowId }] = await db
+    .insert(refreshTokens)
+    .values({
       userId: user.id,
       tokenHash: hashToken(newRefreshTokenValue),
       userAgent: meta.userAgent,
       createdByIp: meta.ip,
       expiresAt: refreshTokenExpiry(),
-    },
-  });
+    })
+    .$returningId();
 
-  await prisma.refreshToken.update({
-    where: { id: existing.id },
-    data: { revokedAt: new Date(), replacedById: newRow.id },
-  });
+  await db.update(refreshTokens).set({ revokedAt: new Date(), replacedById: newRowId }).where(eq(refreshTokens.id, existing.id));
 
   return { accessToken: newAccessToken, refreshToken: newRefreshTokenValue };
 }
 
 export async function logout(refreshToken: string): Promise<void> {
   const tokenHash = hashToken(refreshToken);
-  await prisma.refreshToken.updateMany({
-    where: { tokenHash, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
+  await db.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt)));
 }
 
 export async function logoutAll(userId: number): Promise<void> {
-  await prisma.refreshToken.updateMany({
-    where: { userId, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
+  await db.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
 }
