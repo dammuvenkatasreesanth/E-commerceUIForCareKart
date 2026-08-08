@@ -1,83 +1,139 @@
-import { prisma } from "../../lib/prisma";
+import { and, asc, desc, eq } from "drizzle-orm";
+import { db } from "../../db";
+import { banners, contentPages, coupons, emailCampaigns, storeSettings, users, type ACCOUNT_TYPE } from "../../db/schema";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
 import { sendMail } from "../../providers/email/mailer";
 import { logger } from "../../lib/logger";
-import type { AccountType } from "@prisma/client";
+
+type AccountType = (typeof ACCOUNT_TYPE)[number];
+
+function definedEntries<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const result: Partial<T> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) (result as Record<string, unknown>)[k] = v;
+  }
+  return result;
+}
 
 // ── Coupons ────────────────────────────────────────────────────────────
 
 export async function listCoupons() {
-  return prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
+  return db.query.coupons.findMany({ orderBy: [desc(coupons.createdAt)] });
 }
 
 export async function createCoupon(createdById: number, input: { code: string; type: "PERCENT" | "FLAT"; value: number; minOrderAmount: number; maxUses?: number; expiresAt?: Date }) {
   const code = input.code.toUpperCase();
-  const existing = await prisma.coupon.findUnique({ where: { code } });
+  const existing = await db.query.coupons.findFirst({ where: eq(coupons.code, code) });
   if (existing) throw new BadRequestError("A coupon with this code already exists");
-  return prisma.coupon.create({ data: { ...input, code, createdById } });
+  const [{ id }] = await db
+    .insert(coupons)
+    .values({ code, type: input.type, value: String(input.value), minOrderAmount: String(input.minOrderAmount), maxUses: input.maxUses, expiresAt: input.expiresAt, createdById })
+    .$returningId();
+  const created = await db.query.coupons.findFirst({ where: eq(coupons.id, id) });
+  if (!created) throw new NotFoundError("Coupon not found");
+  return created;
 }
 
 export async function updateCoupon(id: number, input: Partial<{ code: string; type: "PERCENT" | "FLAT"; value: number; minOrderAmount: number; maxUses: number; expiresAt: Date; isActive: boolean }>) {
-  const coupon = await prisma.coupon.findUnique({ where: { id } });
+  const coupon = await db.query.coupons.findFirst({ where: eq(coupons.id, id) });
   if (!coupon) throw new NotFoundError("Coupon not found");
-  const data = { ...input, code: input.code ? input.code.toUpperCase() : undefined };
-  return prisma.coupon.update({ where: { id }, data });
+  const data = definedEntries({
+    code: input.code ? input.code.toUpperCase() : undefined,
+    type: input.type,
+    value: input.value !== undefined ? String(input.value) : undefined,
+    minOrderAmount: input.minOrderAmount !== undefined ? String(input.minOrderAmount) : undefined,
+    maxUses: input.maxUses,
+    expiresAt: input.expiresAt,
+    isActive: input.isActive,
+  });
+  await db.update(coupons).set(data).where(eq(coupons.id, id));
+  const updated = await db.query.coupons.findFirst({ where: eq(coupons.id, id) });
+  if (!updated) throw new NotFoundError("Coupon not found");
+  return updated;
 }
 
 export async function deleteCoupon(id: number) {
-  const coupon = await prisma.coupon.findUnique({ where: { id } });
+  const coupon = await db.query.coupons.findFirst({ where: eq(coupons.id, id) });
   if (!coupon) throw new NotFoundError("Coupon not found");
-  await prisma.coupon.update({ where: { id }, data: { isActive: false } });
+  await db.update(coupons).set({ isActive: false }).where(eq(coupons.id, id));
 }
 
 // ── Banners ────────────────────────────────────────────────────────────
 
+interface BannerInput {
+  badge?: string;
+  headline: string;
+  subheadline?: string;
+  subtext?: string;
+  ctaPrimaryText?: string;
+  ctaPrimaryLink?: string;
+  ctaSecondaryText?: string;
+  ctaSecondaryLink?: string;
+  bgGradient?: string;
+  imageUrl?: string;
+  sortOrder?: number;
+  startsAt?: Date;
+  endsAt?: Date;
+}
+
 export async function listBannersAdmin() {
-  return prisma.banner.findMany({ orderBy: { sortOrder: "asc" } });
+  return db.query.banners.findMany({ orderBy: [asc(banners.sortOrder)] });
 }
 
-export async function createBanner(input: Record<string, unknown>) {
-  return prisma.banner.create({ data: input as never });
+export async function createBanner(input: BannerInput) {
+  const [{ id }] = await db.insert(banners).values(input).$returningId();
+  const created = await db.query.banners.findFirst({ where: eq(banners.id, id) });
+  if (!created) throw new NotFoundError("Banner not found");
+  return created;
 }
 
-export async function updateBanner(id: number, input: Record<string, unknown>) {
-  const banner = await prisma.banner.findUnique({ where: { id } });
+export async function updateBanner(id: number, input: Partial<BannerInput> & { isActive?: boolean }) {
+  const banner = await db.query.banners.findFirst({ where: eq(banners.id, id) });
   if (!banner) throw new NotFoundError("Banner not found");
-  return prisma.banner.update({ where: { id }, data: input as never });
+  await db.update(banners).set(definedEntries(input)).where(eq(banners.id, id));
+  const updated = await db.query.banners.findFirst({ where: eq(banners.id, id) });
+  if (!updated) throw new NotFoundError("Banner not found");
+  return updated;
 }
 
 export async function deleteBanner(id: number) {
-  const banner = await prisma.banner.findUnique({ where: { id } });
+  const banner = await db.query.banners.findFirst({ where: eq(banners.id, id) });
   if (!banner) throw new NotFoundError("Banner not found");
-  await prisma.banner.delete({ where: { id } });
+  await db.delete(banners).where(eq(banners.id, id));
 }
 
 // ── Content pages ─────────────────────────────────────────────────────
 
 export async function listContentPages() {
-  return prisma.contentPage.findMany({ orderBy: { updatedAt: "desc" } });
+  return db.query.contentPages.findMany({ orderBy: [desc(contentPages.updatedAt)] });
 }
 
 export async function createContentPage(updatedById: number, input: { slug: string; title: string; bodyHtml: string }) {
-  const existing = await prisma.contentPage.findUnique({ where: { slug: input.slug } });
+  const existing = await db.query.contentPages.findFirst({ where: eq(contentPages.slug, input.slug) });
   if (existing) throw new BadRequestError("A page with this slug already exists");
-  return prisma.contentPage.create({ data: { ...input, updatedById } });
+  const [{ id }] = await db.insert(contentPages).values({ ...input, updatedById, updatedAt: new Date() }).$returningId();
+  const created = await db.query.contentPages.findFirst({ where: eq(contentPages.id, id) });
+  if (!created) throw new NotFoundError("Page not found");
+  return created;
 }
 
 export async function updateContentPage(id: number, updatedById: number, input: Partial<{ slug: string; title: string; bodyHtml: string; isPublished: boolean }>) {
-  const page = await prisma.contentPage.findUnique({ where: { id } });
+  const page = await db.query.contentPages.findFirst({ where: eq(contentPages.id, id) });
   if (!page) throw new NotFoundError("Page not found");
-  return prisma.contentPage.update({ where: { id }, data: { ...input, updatedById } });
+  await db.update(contentPages).set({ ...definedEntries(input), updatedById, updatedAt: new Date() }).where(eq(contentPages.id, id));
+  const updated = await db.query.contentPages.findFirst({ where: eq(contentPages.id, id) });
+  if (!updated) throw new NotFoundError("Page not found");
+  return updated;
 }
 
 export async function deleteContentPage(id: number) {
-  const page = await prisma.contentPage.findUnique({ where: { id } });
+  const page = await db.query.contentPages.findFirst({ where: eq(contentPages.id, id) });
   if (!page) throw new NotFoundError("Page not found");
-  await prisma.contentPage.delete({ where: { id } });
+  await db.delete(contentPages).where(eq(contentPages.id, id));
 }
 
 export async function getPublishedPage(slug: string) {
-  const page = await prisma.contentPage.findUnique({ where: { slug } });
+  const page = await db.query.contentPages.findFirst({ where: eq(contentPages.slug, slug) });
   if (!page || !page.isPublished) throw new NotFoundError("Page not found");
   return page;
 }
@@ -85,27 +141,33 @@ export async function getPublishedPage(slug: string) {
 // ── Email campaigns ───────────────────────────────────────────────────
 
 export async function listCampaigns() {
-  return prisma.emailCampaign.findMany({ orderBy: { createdAt: "desc" } });
+  return db.query.emailCampaigns.findMany({ orderBy: [desc(emailCampaigns.createdAt)] });
 }
 
 export async function createCampaign(
   createdById: number,
   input: { subject: string; bodyHtml: string; segment?: { accountType?: AccountType }; sendNow: boolean },
 ) {
-  const where = input.segment?.accountType ? { role: "CUSTOMER" as const, accountType: input.segment.accountType } : { role: "CUSTOMER" as const };
-  const recipients = await prisma.user.findMany({ where, select: { email: true } });
+  const where = input.segment?.accountType
+    ? and(eq(users.role, "CUSTOMER"), eq(users.accountType, input.segment.accountType))
+    : eq(users.role, "CUSTOMER");
+
+  const recipients = await db.query.users.findMany({ where, columns: { email: true } });
   const emails = recipients.map((r) => r.email).filter((e): e is string => !!e);
 
-  const campaign = await prisma.emailCampaign.create({
-    data: {
+  const [{ id: campaignId }] = await db
+    .insert(emailCampaigns)
+    .values({
       subject: input.subject,
       bodyHtml: input.bodyHtml,
       segment: input.segment ?? {},
       status: input.sendNow ? "SENDING" : "DRAFT",
       recipientCount: emails.length,
       createdById,
-    },
-  });
+    })
+    .$returningId();
+  const campaign = await db.query.emailCampaigns.findFirst({ where: eq(emailCampaigns.id, campaignId) });
+  if (!campaign) throw new NotFoundError("Campaign not found");
 
   if (input.sendNow) {
     // Fire-and-forget: campaign sends run inline (no queue), so we don't block the API response on N emails.
@@ -125,20 +187,22 @@ async function sendCampaignEmails(campaignId: number, subject: string, bodyHtml:
       logger.error({ err, to }, "Failed to send campaign email to recipient");
     }
   }
-  await prisma.emailCampaign.update({ where: { id: campaignId }, data: { status: "SENT", sentAt: new Date() } });
+  await db.update(emailCampaigns).set({ status: "SENT", sentAt: new Date() }).where(eq(emailCampaigns.id, campaignId));
 }
 
 // ── Store settings ─────────────────────────────────────────────────────
 
 export async function getSettings() {
-  const rows = await prisma.storeSetting.findMany();
+  const rows = await db.select().from(storeSettings);
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
 
 export async function updateSetting(key: string, value: unknown) {
-  return prisma.storeSetting.upsert({
-    where: { key },
-    update: { value: value as never },
-    create: { key, value: value as never },
-  });
+  await db
+    .insert(storeSettings)
+    .values({ key, value, updatedAt: new Date() })
+    .onDuplicateKeyUpdate({ set: { value, updatedAt: new Date() } });
+  const updated = await db.query.storeSettings.findFirst({ where: eq(storeSettings.key, key) });
+  if (!updated) throw new NotFoundError("Setting not found");
+  return updated;
 }
