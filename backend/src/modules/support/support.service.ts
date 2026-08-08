@@ -1,22 +1,29 @@
-import { prisma } from "../../lib/prisma";
+import { asc, count, desc, eq } from "drizzle-orm";
+import { db } from "../../db";
+import { orders, supportTickets, ticketNotes, type TICKET_STATUS, type TICKET_PRIORITY } from "../../db/schema";
 import { ForbiddenError, NotFoundError } from "../../lib/errors";
 import { buildTicketNumber } from "../../lib/ticketNumber";
-import type { TicketStatus, TicketPriority } from "@prisma/client";
 
-const ticketInclude = {
-  notes: { orderBy: { createdAt: "asc" as const } },
-  user: { select: { id: true, name: true, phone: true, email: true } },
-  assignedTo: { select: { id: true, name: true } },
-};
+type TicketStatus = (typeof TICKET_STATUS)[number];
+type TicketPriority = (typeof TICKET_PRIORITY)[number];
+
+function ticketWith() {
+  return {
+    notes: { orderBy: [asc(ticketNotes.createdAt)] },
+    user: { columns: { id: true, name: true, phone: true, email: true } },
+    assignedTo: { columns: { id: true, name: true } },
+  };
+}
 
 export async function createTicket(userId: number, input: { subject: string; description: string; orderId?: number; priority: TicketPriority }) {
   if (input.orderId) {
-    const order = await prisma.order.findUnique({ where: { id: input.orderId } });
+    const order = await db.query.orders.findFirst({ where: eq(orders.id, input.orderId) });
     if (!order || order.userId !== userId) throw new ForbiddenError("Invalid order reference");
   }
 
-  const ticket = await prisma.supportTicket.create({
-    data: {
+  const [{ id }] = await db
+    .insert(supportTickets)
+    .values({
       ticketNumber: `PENDING-${userId}-${Date.now()}`,
       userId,
       orderId: input.orderId,
@@ -24,18 +31,23 @@ export async function createTicket(userId: number, input: { subject: string; des
       description: input.description,
       priority: input.priority,
       status: "OPEN",
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .$returningId();
 
-  return prisma.supportTicket.update({ where: { id: ticket.id }, data: { ticketNumber: buildTicketNumber(ticket.id) } });
+  await db.update(supportTickets).set({ ticketNumber: buildTicketNumber(id), updatedAt: new Date() }).where(eq(supportTickets.id, id));
+
+  const created = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, id) });
+  if (!created) throw new NotFoundError("Ticket not found");
+  return created;
 }
 
 export async function listTicketsForUser(userId: number) {
-  return prisma.supportTicket.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
+  return db.query.supportTickets.findMany({ where: eq(supportTickets.userId, userId), orderBy: [desc(supportTickets.createdAt)] });
 }
 
 export async function getTicketForUser(userId: number, id: number) {
-  const ticket = await prisma.supportTicket.findUnique({ where: { id }, include: ticketInclude });
+  const ticket = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, id), with: ticketWith() });
   if (!ticket) throw new NotFoundError("Ticket not found");
   if (ticket.userId !== userId) throw new ForbiddenError("This ticket does not belong to you");
   return ticket;
@@ -44,37 +56,44 @@ export async function getTicketForUser(userId: number, id: number) {
 // ── Staff (Employee/Admin) access ───────────────────────────────────────
 
 export async function listAllTickets(query: { status?: TicketStatus; page: number; limit: number }) {
-  const where = query.status ? { status: query.status } : {};
-  const [items, total] = await prisma.$transaction([
-    prisma.supportTicket.findMany({
+  const where = query.status ? eq(supportTickets.status, query.status) : undefined;
+
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.supportTickets.findMany({
       where,
-      include: { user: { select: { name: true, phone: true } }, assignedTo: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
+      with: { user: { columns: { name: true, phone: true } }, assignedTo: { columns: { name: true } } },
+      orderBy: [desc(supportTickets.createdAt)],
+      limit: query.limit,
+      offset: (query.page - 1) * query.limit,
     }),
-    prisma.supportTicket.count({ where }),
+    db.select({ value: count() }).from(supportTickets).where(where),
   ]);
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 export async function getTicketAny(id: number) {
-  const ticket = await prisma.supportTicket.findUnique({ where: { id }, include: ticketInclude });
+  const ticket = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, id), with: ticketWith() });
   if (!ticket) throw new NotFoundError("Ticket not found");
   return ticket;
 }
 
 export async function addNote(ticketId: number, authorId: number, note: string, isInternal: boolean) {
-  const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+  const ticket = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, ticketId) });
   if (!ticket) throw new NotFoundError("Ticket not found");
-  return prisma.ticketNote.create({ data: { ticketId, authorId, note, isInternal } });
+  const [{ id }] = await db.insert(ticketNotes).values({ ticketId, authorId, note, isInternal }).$returningId();
+  const created = await db.query.ticketNotes.findFirst({ where: eq(ticketNotes.id, id) });
+  if (!created) throw new NotFoundError("Ticket note not found");
+  return created;
 }
 
 export async function updateTicketStatus(ticketId: number, actorId: number, status: TicketStatus, assignToSelf: boolean) {
-  const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+  const ticket = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, ticketId) });
   if (!ticket) throw new NotFoundError("Ticket not found");
-  return prisma.supportTicket.update({
-    where: { id: ticketId },
-    data: { status, assignedToId: assignToSelf ? actorId : ticket.assignedToId },
-  });
+  await db
+    .update(supportTickets)
+    .set({ status, assignedToId: assignToSelf ? actorId : ticket.assignedToId, updatedAt: new Date() })
+    .where(eq(supportTickets.id, ticketId));
+  const updated = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, ticketId) });
+  if (!updated) throw new NotFoundError("Ticket not found");
+  return updated;
 }

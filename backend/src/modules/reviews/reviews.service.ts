@@ -1,4 +1,6 @@
-import { prisma } from "../../lib/prisma";
+import { and, avg, count, desc, eq, sql } from "drizzle-orm";
+import { db } from "../../db";
+import { orderItems, orders, products, reviews } from "../../db/schema";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors";
 
 interface CreateReviewInput {
@@ -10,32 +12,33 @@ interface CreateReviewInput {
 }
 
 async function isVerifiedPurchase(userId: number, productId: number): Promise<boolean> {
-  const deliveredItem = await prisma.orderItem.findFirst({
-    where: {
-      productId,
-      order: { userId, status: "DELIVERED" },
-    },
-  });
-  return !!deliveredItem;
+  const [row] = await db
+    .select({ id: orderItems.id })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(eq(orderItems.productId, productId), eq(orders.userId, userId), eq(orders.status, "DELIVERED")))
+    .limit(1);
+  return !!row;
 }
 
 export async function createReview(userId: number, input: CreateReviewInput) {
-  const product = await prisma.product.findUnique({ where: { id: input.productId } });
+  const product = await db.query.products.findFirst({ where: eq(products.id, input.productId) });
   if (!product || !product.isActive) throw new NotFoundError("Product not found");
 
-  const existing = await prisma.review.findFirst({ where: { productId: input.productId, userId } });
+  const existing = await db.query.reviews.findFirst({ where: and(eq(reviews.productId, input.productId), eq(reviews.userId, userId)) });
   if (existing) throw new ConflictError("You have already reviewed this product");
 
   if (input.orderId) {
-    const order = await prisma.order.findUnique({ where: { id: input.orderId } });
+    const order = await db.query.orders.findFirst({ where: eq(orders.id, input.orderId) });
     if (!order || order.userId !== userId) throw new BadRequestError("Invalid order reference");
   }
 
   const verified = await isVerifiedPurchase(userId, input.productId);
 
-  const review = await prisma.$transaction(async (tx) => {
-    const created = await tx.review.create({
-      data: {
+  const reviewId = await db.transaction(async (tx) => {
+    const [{ id }] = await tx
+      .insert(reviews)
+      .values({
         productId: input.productId,
         userId,
         orderId: input.orderId,
@@ -44,40 +47,39 @@ export async function createReview(userId: number, input: CreateReviewInput) {
         body: input.body,
         isVerifiedPurchase: verified,
         status: "APPROVED",
-      },
-    });
+      })
+      .$returningId();
 
-    const agg = await tx.review.aggregate({
-      where: { productId: input.productId, status: "APPROVED" },
-      _avg: { rating: true },
-      _count: true,
-    });
+    const [agg] = await tx
+      .select({ avgRating: avg(reviews.rating), count: count() })
+      .from(reviews)
+      .where(and(eq(reviews.productId, input.productId), eq(reviews.status, "APPROVED")));
 
-    await tx.product.update({
-      where: { id: input.productId },
-      data: {
-        ratingAvg: agg._avg.rating ?? 0,
-        ratingCount: agg._count,
-      },
-    });
+    await tx
+      .update(products)
+      .set({ ratingAvg: agg.avgRating ?? "0", ratingCount: agg.count, updatedAt: new Date() })
+      .where(eq(products.id, input.productId));
 
-    return created;
+    return id;
   });
 
-  return review;
+  const created = await db.query.reviews.findFirst({ where: eq(reviews.id, reviewId) });
+  if (!created) throw new NotFoundError("Review not found");
+  return created;
 }
 
 export async function listReviewsForProduct(productId: number, page: number, limit: number) {
-  const where = { productId, status: "APPROVED" as const };
-  const [items, total] = await prisma.$transaction([
-    prisma.review.findMany({
+  const where = and(eq(reviews.productId, productId), eq(reviews.status, "APPROVED"));
+
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.reviews.findMany({
       where,
-      include: { user: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * limit,
-      take: limit,
+      with: { user: { columns: { name: true } } },
+      orderBy: [desc(reviews.createdAt)],
+      limit,
+      offset: (page - 1) * limit,
     }),
-    prisma.review.count({ where }),
+    db.select({ value: count() }).from(reviews).where(where),
   ]);
 
   return {
@@ -99,7 +101,10 @@ export async function listReviewsForProduct(productId: number, page: number, lim
 }
 
 export async function markHelpful(reviewId: number) {
-  const review = await prisma.review.findUnique({ where: { id: reviewId } });
+  const review = await db.query.reviews.findFirst({ where: eq(reviews.id, reviewId) });
   if (!review) throw new NotFoundError("Review not found");
-  return prisma.review.update({ where: { id: reviewId }, data: { helpfulCount: { increment: 1 } } });
+  await db.update(reviews).set({ helpfulCount: sql`${reviews.helpfulCount} + 1` }).where(eq(reviews.id, reviewId));
+  const updated = await db.query.reviews.findFirst({ where: eq(reviews.id, reviewId) });
+  if (!updated) throw new NotFoundError("Review not found");
+  return updated;
 }
