@@ -1,19 +1,9 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
-import { cartItems, productImages, packPriceTiers, products } from "../../db/schema";
+import { cartItems, productImages, productSizes, packPriceTiers, products } from "../../db/schema";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { tierUnitPrice, computeShipping } from "../../lib/pricing";
-
-function cartItemWith() {
-  return {
-    product: {
-      with: {
-        images: { limit: 1, orderBy: [asc(productImages.sortOrder)] },
-        packTiers: { orderBy: [asc(packPriceTiers.tierIndex)] },
-      },
-    },
-  };
-}
+import { groupBy, indexBy } from "../../lib/batchLoad";
 
 function serializeCart(items: Awaited<ReturnType<typeof fetchRawCart>>) {
   const serializedItems = items.map((item) => {
@@ -52,12 +42,32 @@ function serializeCart(items: Awaited<ReturnType<typeof fetchRawCart>>) {
   };
 }
 
-function fetchRawCart(userId: number) {
-  return db.query.cartItems.findMany({
-    where: eq(cartItems.userId, userId),
-    with: cartItemWith(),
-    orderBy: [asc(cartItems.createdAt)],
-  });
+// MariaDB (Hostinger's production MySQL) doesn't support the LEFT JOIN LATERAL
+// SQL that Drizzle's relational `with:` API generates, so product + images +
+// packTiers are batch-loaded with plain WHERE IN queries and attached in JS.
+async function fetchRawCart(userId: number) {
+  const items = await db.select().from(cartItems).where(eq(cartItems.userId, userId)).orderBy(asc(cartItems.createdAt));
+  if (items.length === 0) return [];
+
+  const productIds = [...new Set(items.map((i) => i.productId))];
+  const [prods, images, tiers] = await Promise.all([
+    db.select().from(products).where(inArray(products.id, productIds)),
+    db.select().from(productImages).where(inArray(productImages.productId, productIds)).orderBy(asc(productImages.sortOrder)),
+    db.select().from(packPriceTiers).where(inArray(packPriceTiers.productId, productIds)).orderBy(asc(packPriceTiers.tierIndex)),
+  ]);
+
+  const productById = indexBy(prods, (p) => p.id);
+  const imagesByProduct = groupBy(images, (i) => i.productId);
+  const tiersByProduct = groupBy(tiers, (t) => t.productId);
+
+  return items.map((item) => ({
+    ...item,
+    product: {
+      ...productById.get(item.productId)!,
+      images: imagesByProduct.get(item.productId) ?? [],
+      packTiers: tiersByProduct.get(item.productId) ?? [],
+    },
+  }));
 }
 
 export const getRawCartItems = fetchRawCart;
@@ -82,22 +92,22 @@ interface QuoteLineInput {
 export async function quoteCart(items: QuoteLineInput[]) {
   const results = await Promise.all(
     items.map(async (line) => {
-      const product = await db.query.products.findFirst({
-        where: eq(products.id, line.productId),
-        with: {
-          images: { orderBy: [asc(productImages.sortOrder)] },
-          sizes: true,
-          packTiers: true,
-        },
-      });
+      const [product] = await db.select().from(products).where(eq(products.id, line.productId)).limit(1);
 
       if (!product || !product.isActive) {
         return { ...line, valid: false as const, reason: "This product is no longer available" };
       }
-      if (!product.sizes.some((s) => s.size === line.sizeLabel)) {
+
+      const [images, sizes, tiers] = await Promise.all([
+        db.select().from(productImages).where(eq(productImages.productId, product.id)).orderBy(asc(productImages.sortOrder)),
+        db.select().from(productSizes).where(eq(productSizes.productId, product.id)),
+        db.select().from(packPriceTiers).where(eq(packPriceTiers.productId, product.id)),
+      ]);
+
+      if (!sizes.some((s) => s.size === line.sizeLabel)) {
         return { ...line, valid: false as const, reason: "This size is no longer available" };
       }
-      const tier = product.packTiers.find((t) => t.tierIndex === line.tierIndex);
+      const tier = tiers.find((t) => t.tierIndex === line.tierIndex);
       if (!tier) {
         return { ...line, valid: false as const, reason: "This pack option is no longer available" };
       }
@@ -113,7 +123,7 @@ export async function quoteCart(items: QuoteLineInput[]) {
         productId: product.id,
         name: product.name,
         slug: product.slug,
-        image: product.images[0]?.url ?? null,
+        image: images[0]?.url ?? null,
         sizeLabel: line.sizeLabel,
         tierIndex: line.tierIndex,
         tierLabel: tier.label,
@@ -149,15 +159,17 @@ interface AddItemInput {
 }
 
 export async function addItem(userId: number, input: AddItemInput) {
-  const product = await db.query.products.findFirst({
-    where: eq(products.id, input.productId),
-    with: { sizes: true, packTiers: true },
-  });
+  const [product] = await db.select().from(products).where(eq(products.id, input.productId)).limit(1);
   if (!product || !product.isActive) throw new NotFoundError("Product not found");
-  if (!product.sizes.some((s) => s.size === input.sizeLabel)) {
+
+  const [sizes, tiers] = await Promise.all([
+    db.select().from(productSizes).where(eq(productSizes.productId, input.productId)),
+    db.select().from(packPriceTiers).where(eq(packPriceTiers.productId, input.productId)),
+  ]);
+  if (!sizes.some((s) => s.size === input.sizeLabel)) {
     throw new BadRequestError("Selected size is not available for this product");
   }
-  if (!product.packTiers.some((t) => t.tierIndex === input.tierIndex)) {
+  if (!tiers.some((t) => t.tierIndex === input.tierIndex)) {
     throw new BadRequestError("Selected pack tier is not available for this product");
   }
 

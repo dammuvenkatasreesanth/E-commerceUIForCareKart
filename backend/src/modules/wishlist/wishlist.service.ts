@@ -1,30 +1,39 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { productImages, products, wishlistItems } from "../../db/schema";
 import { NotFoundError } from "../../lib/errors";
+import { groupBy, indexBy } from "../../lib/batchLoad";
 
 export async function listWishlist(userId: number) {
   const items = await db.query.wishlistItems.findMany({
     where: eq(wishlistItems.userId, userId),
     orderBy: [desc(wishlistItems.createdAt)],
-    with: {
-      product: {
-        with: { images: { limit: 1, orderBy: [asc(productImages.sortOrder)] } },
-      },
-    },
   });
+  if (items.length === 0) return [];
 
-  return items.map((item) => ({
-    id: item.id,
-    productId: item.productId,
-    name: item.product.name,
-    slug: item.product.slug,
-    image: item.product.images[0]?.url ?? null,
-    price: item.product.price,
-    mrp: item.product.mrp,
-    inStock: item.product.inStock && item.product.isActive,
-    addedAt: item.createdAt,
-  }));
+  const productIds = [...new Set(items.map((i) => i.productId))];
+  const [prods, images] = await Promise.all([
+    db.select().from(products).where(inArray(products.id, productIds)),
+    db.select().from(productImages).where(inArray(productImages.productId, productIds)).orderBy(asc(productImages.sortOrder)),
+  ]);
+  const productById = indexBy(prods, (p) => p.id);
+  const imagesByProduct = groupBy(images, (i) => i.productId);
+
+  return items.map((item) => {
+    const product = productById.get(item.productId)!;
+    const productImage = imagesByProduct.get(item.productId) ?? [];
+    return {
+      id: item.id,
+      productId: item.productId,
+      name: product.name,
+      slug: product.slug,
+      image: productImage[0]?.url ?? null,
+      price: product.price,
+      mrp: product.mrp,
+      inStock: product.inStock && product.isActive,
+      addedAt: item.createdAt,
+    };
+  });
 }
 
 export async function addToWishlist(userId: number, productId: number) {
