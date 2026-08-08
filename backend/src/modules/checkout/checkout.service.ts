@@ -1,4 +1,6 @@
-import { prisma } from "../../lib/prisma";
+import { eq, sql } from "drizzle-orm";
+import { db } from "../../db";
+import { addresses, coupons, couponRedemptions, cartItems, orderItems, orders, orderStatusHistory, users, type PAYMENT_METHOD } from "../../db/schema";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { tierUnitPrice, computeShipping } from "../../lib/pricing";
 import { buildOrderNumber } from "../../lib/orderNumber";
@@ -8,11 +10,10 @@ import { generateInvoicePdf } from "../../providers/pdf/invoice.pdf";
 import { sendMail } from "../../providers/email/mailer";
 import { orderConfirmationEmail } from "../../providers/email/templates/orderConfirmation";
 import { logger } from "../../lib/logger";
-import type { PaymentMethod } from "@prisma/client";
 
 interface CreateOrderInput {
   addressId: number;
-  paymentMethod: PaymentMethod;
+  paymentMethod: (typeof PAYMENT_METHOD)[number];
   couponCode?: string;
 }
 
@@ -22,23 +23,23 @@ function extractGst(lineTotal: number, gstRatePct: number): number {
 }
 
 export async function createOrder(userId: number, input: CreateOrderInput) {
-  const [user, address, cartItems] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId } }),
-    prisma.address.findUnique({ where: { id: input.addressId } }),
+  const [user, address, items] = await Promise.all([
+    db.query.users.findFirst({ where: eq(users.id, userId) }),
+    db.query.addresses.findFirst({ where: eq(addresses.id, input.addressId) }),
     getRawCartItems(userId),
   ]);
 
   if (!user) throw new NotFoundError("User not found");
   if (!address) throw new NotFoundError("Address not found");
   if (address.userId !== userId) throw new ForbiddenError("This address does not belong to you");
-  if (cartItems.length === 0) throw new BadRequestError("Your cart is empty");
+  if (items.length === 0) throw new BadRequestError("Your cart is empty");
 
-  const unavailable = cartItems.find((item) => !item.product.isActive || !item.product.inStock);
+  const unavailable = items.find((item) => !item.product.isActive || !item.product.inStock);
   if (unavailable) {
     throw new BadRequestError(`${unavailable.product.name} is currently out of stock. Please update your cart.`);
   }
 
-  const lineItems = cartItems.map((item) => {
+  const lineItems = items.map((item) => {
     const tier = item.product.packTiers.find((t) => t.tierIndex === item.tierIndex);
     const packQty = tier?.packQty ?? 1;
     const discountPct = tier?.discountPct ?? 0;
@@ -79,19 +80,20 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
   const isCod = input.paymentMethod === "COD";
   const initialStatus = isCod ? "CONFIRMED" : "PENDING";
 
-  const order = await prisma.$transaction(async (tx) => {
-    const created = await tx.order.create({
-      data: {
+  const orderId = await db.transaction(async (tx) => {
+    const [{ id }] = await tx
+      .insert(orders)
+      .values({
         orderNumber: `PENDING-${userId}-${Date.now()}`,
         userId,
         status: initialStatus,
         paymentMethod: input.paymentMethod,
         paymentStatus: "PENDING",
-        subtotal,
-        discountAmount,
-        shippingAmount,
-        taxAmount,
-        totalAmount,
+        subtotal: String(subtotal),
+        discountAmount: String(discountAmount),
+        shippingAmount: String(shippingAmount),
+        taxAmount: String(taxAmount),
+        totalAmount: String(totalAmount),
         couponId,
         shipName: address.name,
         shipPhone: address.phone,
@@ -102,47 +104,44 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
         shipPincode: address.pincode,
         billingGstin: user.accountType === "BUSINESS" ? user.gstin : null,
         billingAccountType: user.accountType,
-        items: {
-          create: lineItems.map((i) => ({
-            productId: i.productId,
-            productName: i.productName,
-            imageUrl: i.imageUrl,
-            sizeLabel: i.sizeLabel,
-            tierIndex: i.tierIndex,
-            packQty: i.packQty,
-            unitPrice: i.unitPrice,
-            quantity: i.quantity,
-            lineTotal: i.lineTotal,
-            gstRate: i.gstRate,
-            hsnCode: i.hsnCode,
-          })),
-        },
-      },
-      include: { items: true },
-    });
+        updatedAt: new Date(),
+      })
+      .$returningId();
 
-    const orderNumber = buildOrderNumber(created.id);
-    const updated = await tx.order.update({
-      where: { id: created.id },
-      data: { orderNumber },
-      include: { items: true },
-    });
+    await tx.insert(orderItems).values(
+      lineItems.map((i) => ({
+        orderId: id,
+        productId: i.productId,
+        productName: i.productName,
+        imageUrl: i.imageUrl,
+        sizeLabel: i.sizeLabel,
+        tierIndex: i.tierIndex,
+        packQty: i.packQty,
+        unitPrice: String(i.unitPrice),
+        quantity: i.quantity,
+        lineTotal: String(i.lineTotal),
+        gstRate: String(i.gstRate),
+        hsnCode: i.hsnCode,
+      })),
+    );
 
-    await tx.orderStatusHistory.create({
-      data: { orderId: created.id, fromStatus: null, toStatus: initialStatus, note: "Order placed" },
-    });
+    const orderNumber = buildOrderNumber(id);
+    await tx.update(orders).set({ orderNumber, updatedAt: new Date() }).where(eq(orders.id, id));
+
+    await tx.insert(orderStatusHistory).values({ orderId: id, fromStatus: null, toStatus: initialStatus, note: "Order placed" });
 
     if (couponId) {
-      await tx.couponRedemption.create({
-        data: { couponId, orderId: created.id, userId, amount: discountAmount },
-      });
-      await tx.coupon.update({ where: { id: couponId }, data: { usedCount: { increment: 1 } } });
+      await tx.insert(couponRedemptions).values({ couponId, orderId: id, userId, amount: String(discountAmount) });
+      await tx.update(coupons).set({ usedCount: sql`${coupons.usedCount} + 1` }).where(eq(coupons.id, couponId));
     }
 
-    await tx.cartItem.deleteMany({ where: { userId } });
+    await tx.delete(cartItems).where(eq(cartItems.userId, userId));
 
-    return updated;
+    return id;
   });
+
+  const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId), with: { items: true } });
+  if (!order) throw new NotFoundError("Order not found");
 
   if (isCod) {
     await sendOrderConfirmation(order.id).catch((err) => {
@@ -154,9 +153,9 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
 }
 
 export async function sendOrderConfirmation(orderId: number): Promise<void> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { items: true, user: true },
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.id, orderId),
+    with: { items: true, user: true },
   });
   if (!order) return;
 

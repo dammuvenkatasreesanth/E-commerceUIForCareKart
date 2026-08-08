@@ -1,14 +1,15 @@
-import { prisma } from "../../lib/prisma";
+import { eq } from "drizzle-orm";
+import { db } from "../../db";
+import { coupons } from "../../db/schema";
 import { BadRequestError } from "../../lib/errors";
-import type { Coupon } from "@prisma/client";
 
 export interface CouponResolution {
-  coupon: Coupon;
+  coupon: typeof coupons.$inferSelect;
   discountAmount: number;
 }
 
 export async function resolveCoupon(code: string, subtotal: number): Promise<CouponResolution> {
-  const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } });
+  const coupon = await db.query.coupons.findFirst({ where: eq(coupons.code, code.toUpperCase()) });
 
   if (!coupon || !coupon.isActive) throw new BadRequestError("Invalid coupon code");
   if (coupon.expiresAt && coupon.expiresAt < new Date()) throw new BadRequestError("This coupon has expired");

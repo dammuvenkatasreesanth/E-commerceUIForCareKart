@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
-import type { Order, OrderItem } from "@prisma/client";
+import type { orders, orderItems } from "../../db/schema";
 
-type InvoiceOrder = Order & { items: OrderItem[] };
+type InvoiceOrder = typeof orders.$inferSelect & { items: (typeof orderItems.$inferSelect)[] };
 
 export function generateInvoicePdf(order: InvoiceOrder): Promise<Buffer> {
   return new Promise((resolve, reject) => {

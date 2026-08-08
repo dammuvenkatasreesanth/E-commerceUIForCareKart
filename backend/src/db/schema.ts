@@ -251,7 +251,7 @@ export const orders = mysqlTable("Order", {
   carrier: varchar("carrier", { length: 191 }),
   cancelReason: varchar("cancelReason", { length: 191 }),
   cancelledAt: datetime("cancelledAt", { fsp: 3 }),
-  placedAt: createdAt(),
+  placedAt: datetime("placedAt", { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [index("Order_userId_idx").on(t.userId), index("Order_status_idx").on(t.status)]);
