@@ -1,15 +1,19 @@
-import { prisma } from "../../lib/prisma";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { db } from "../../db";
+import { auditLogs, users, type ROLE, type USER_STATUS } from "../../db/schema";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
 import * as authService from "../auth/auth.service";
-import type { Role, UserStatus } from "@prisma/client";
+
+type Role = (typeof ROLE)[number];
+type UserStatus = (typeof USER_STATUS)[number];
 
 const STAFF_ROLES: Role[] = ["ADMIN", "EMPLOYEE"];
 
 export async function listStaff() {
-  return prisma.user.findMany({
-    where: { role: { in: STAFF_ROLES } },
-    select: { id: true, name: true, email: true, role: true, status: true, claimedAt: true, lastLoginAt: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
+  return db.query.users.findMany({
+    where: inArray(users.role, STAFF_ROLES),
+    columns: { id: true, name: true, email: true, role: true, status: true, claimedAt: true, lastLoginAt: true, createdAt: true },
+    orderBy: [desc(users.createdAt)],
   });
 }
 
@@ -21,35 +25,42 @@ export async function createStaff(
 }
 
 export async function updateStaffRole(id: number, role: Role) {
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await db.query.users.findFirst({ where: eq(users.id, id) });
   if (!user || !STAFF_ROLES.includes(user.role)) throw new NotFoundError("Staff member not found");
-  return prisma.user.update({ where: { id }, data: { role } });
+  await db.update(users).set({ role, updatedAt: new Date() }).where(eq(users.id, id));
+  const updated = await db.query.users.findFirst({ where: eq(users.id, id) });
+  if (!updated) throw new NotFoundError("Staff member not found");
+  return updated;
 }
 
 export async function updateStaffStatus(actorId: number, id: number, status: UserStatus) {
   if (actorId === id && status !== "ACTIVE") {
     throw new BadRequestError("You cannot block or suspend your own account");
   }
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await db.query.users.findFirst({ where: eq(users.id, id) });
   if (!user || !STAFF_ROLES.includes(user.role)) throw new NotFoundError("Staff member not found");
-  return prisma.user.update({ where: { id }, data: { status } });
+  await db.update(users).set({ status, updatedAt: new Date() }).where(eq(users.id, id));
+  const updated = await db.query.users.findFirst({ where: eq(users.id, id) });
+  if (!updated) throw new NotFoundError("Staff member not found");
+  return updated;
 }
 
 export async function listAuditLog(query: { actorId?: number; entityType?: string; page: number; limit: number }) {
-  const where = {
-    ...(query.actorId ? { actorId: query.actorId } : {}),
-    ...(query.entityType ? { entityType: query.entityType } : {}),
-  };
+  const conditions = [
+    query.actorId !== undefined ? eq(auditLogs.actorId, query.actorId) : undefined,
+    query.entityType !== undefined ? eq(auditLogs.entityType, query.entityType) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [items, total] = await prisma.$transaction([
-    prisma.auditLog.findMany({
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.auditLogs.findMany({
       where,
-      include: { actor: { select: { id: true, name: true, email: true, role: true } } },
-      orderBy: { createdAt: "desc" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
+      with: { actor: { columns: { id: true, name: true, email: true, role: true } } },
+      orderBy: [desc(auditLogs.createdAt)],
+      limit: query.limit,
+      offset: (query.page - 1) * query.limit,
     }),
-    prisma.auditLog.count({ where }),
+    db.select({ value: count() }).from(auditLogs).where(where),
   ]);
 
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };

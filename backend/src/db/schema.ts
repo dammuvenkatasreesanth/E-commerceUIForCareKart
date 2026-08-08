@@ -428,6 +428,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   orders: many(orders),
 }));
 
+export const addressesRelations = relations(addresses, ({ one }) => ({
+  user: one(users, { fields: [addresses.userId], references: [users.id] }),
+}));
+
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, { fields: [categories.parentId], references: [categories.id] }),
   products: many(products),
@@ -529,4 +533,8 @@ export const supportTicketsRelations = relations(supportTickets, ({ one, many })
 export const ticketNotesRelations = relations(ticketNotes, ({ one }) => ({
   ticket: one(supportTickets, { fields: [ticketNotes.ticketId], references: [supportTickets.id] }),
   author: one(users, { fields: [ticketNotes.authorId], references: [users.id] }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  actor: one(users, { fields: [auditLogs.actorId], references: [users.id] }),
 }));

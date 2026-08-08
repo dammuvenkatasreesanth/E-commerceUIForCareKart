@@ -1,7 +1,21 @@
 import { stringify } from "csv-stringify/sync";
-import { prisma } from "../../lib/prisma";
+import { and, asc, count, desc, eq, gte, inArray, like, lte, or, type SQL } from "drizzle-orm";
+import { db } from "../../db";
+import {
+  orderNotes,
+  orderStatusHistory,
+  orders,
+  payments,
+  refunds,
+  returnRequests,
+  users,
+  type ORDER_STATUS,
+  type PAYMENT_STATUS,
+} from "../../db/schema";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
-import type { Prisma, OrderStatus, PaymentStatus } from "@prisma/client";
+
+type OrderStatus = (typeof ORDER_STATUS)[number];
+type PaymentStatus = (typeof PAYMENT_STATUS)[number];
 
 interface ListOrdersQuery {
   status?: OrderStatus;
@@ -13,55 +27,58 @@ interface ListOrdersQuery {
   limit: number;
 }
 
-function buildWhere(query: ListOrdersQuery): Prisma.OrderWhereInput {
-  const where: Prisma.OrderWhereInput = {};
-  if (query.status) where.status = query.status;
-  if (query.paymentStatus) where.paymentStatus = query.paymentStatus;
-  if (query.from || query.to) {
-    where.createdAt = {
-      ...(query.from ? { gte: query.from } : {}),
-      ...(query.to ? { lte: query.to } : {}),
-    };
-  }
+function buildWhere(query: ListOrdersQuery): SQL | undefined {
+  const conditions: SQL[] = [];
+  if (query.status) conditions.push(eq(orders.status, query.status));
+  if (query.paymentStatus) conditions.push(eq(orders.paymentStatus, query.paymentStatus));
+  if (query.from) conditions.push(gte(orders.createdAt, query.from));
+  if (query.to) conditions.push(lte(orders.createdAt, query.to));
   if (query.q) {
-    where.OR = [
-      { orderNumber: { contains: query.q } },
-      { shipName: { contains: query.q } },
-      { shipPhone: { contains: query.q } },
-      { user: { email: { contains: query.q } } },
-    ];
+    const term = `%${query.q}%`;
+    conditions.push(
+      or(
+        like(orders.orderNumber, term),
+        like(orders.shipName, term),
+        like(orders.shipPhone, term),
+        inArray(orders.userId, db.select({ id: users.id }).from(users).where(like(users.email, term))),
+      )!,
+    );
   }
-  return where;
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+function orderUserColumns() {
+  return { id: true as const, name: true as const, phone: true as const, email: true as const };
 }
 
 export async function listOrders(query: ListOrdersQuery) {
   const where = buildWhere(query);
 
-  const [items, total] = await prisma.$transaction([
-    prisma.order.findMany({
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.orders.findMany({
       where,
-      include: { items: true, user: { select: { id: true, name: true, phone: true, email: true } } },
-      orderBy: { createdAt: "desc" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
+      with: { items: true, user: { columns: orderUserColumns() } },
+      orderBy: [desc(orders.createdAt)],
+      limit: query.limit,
+      offset: (query.page - 1) * query.limit,
     }),
-    prisma.order.count({ where }),
+    db.select({ value: count() }).from(orders).where(where),
   ]);
 
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 export async function getOrder(id: number) {
-  const order = await prisma.order.findUnique({
-    where: { id },
-    include: {
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.id, id),
+    with: {
       items: true,
-      statusHistory: { orderBy: { createdAt: "asc" } },
-      notes: { orderBy: { createdAt: "desc" } },
-      payments: { orderBy: { createdAt: "desc" } },
-      refunds: { orderBy: { createdAt: "desc" } },
-      returns: { orderBy: { createdAt: "desc" } },
-      user: { select: { id: true, name: true, phone: true, email: true } },
+      statusHistory: { orderBy: [asc(orderStatusHistory.createdAt)] },
+      notes: { orderBy: [desc(orderNotes.createdAt)] },
+      payments: { orderBy: [desc(payments.createdAt)] },
+      refunds: { orderBy: [desc(refunds.createdAt)] },
+      returns: { orderBy: [desc(returnRequests.createdAt)] },
+      user: { columns: orderUserColumns() },
     },
   });
   if (!order) throw new NotFoundError("Order not found");
@@ -73,30 +90,31 @@ export async function updateOrderStatus(
   id: number,
   input: { status: OrderStatus; note?: string; trackingId?: string; carrier?: string },
 ) {
-  const order = await prisma.order.findUnique({ where: { id } });
+  const order = await db.query.orders.findFirst({ where: eq(orders.id, id) });
   if (!order) throw new NotFoundError("Order not found");
 
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.order.update({
-      where: { id },
-      data: {
+  return db.transaction(async (tx) => {
+    await tx
+      .update(orders)
+      .set({
         status: input.status,
         trackingId: input.trackingId ?? order.trackingId,
         carrier: input.carrier ?? order.carrier,
         cancelledAt: input.status === "CANCELLED" ? new Date() : order.cancelledAt,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, id));
 
-    await tx.orderStatusHistory.create({
-      data: { orderId: id, fromStatus: order.status, toStatus: input.status, changedById: actorId, note: input.note },
-    });
+    await tx.insert(orderStatusHistory).values({ orderId: id, fromStatus: order.status, toStatus: input.status, changedById: actorId, note: input.note });
 
+    const updated = await tx.query.orders.findFirst({ where: eq(orders.id, id) });
+    if (!updated) throw new NotFoundError("Order not found");
     return updated;
   });
 }
 
 export async function initiateRefund(actorId: number, orderId: number, input: { amount: number; reason: string }) {
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
   if (!order) throw new NotFoundError("Order not found");
   if (order.paymentStatus !== "PAID" && order.paymentStatus !== "PARTIALLY_REFUNDED") {
     throw new BadRequestError("This order has not been paid, so it cannot be refunded");
@@ -105,39 +123,43 @@ export async function initiateRefund(actorId: number, orderId: number, input: { 
     throw new BadRequestError("Refund amount cannot exceed the order total");
   }
 
-  const payment = await prisma.payment.findFirst({ where: { orderId, status: "SUCCESS" }, orderBy: { createdAt: "desc" } });
+  const payment = await db.query.payments.findFirst({
+    where: and(eq(payments.orderId, orderId), eq(payments.status, "SUCCESS")),
+    orderBy: [desc(payments.createdAt)],
+  });
 
-  return prisma.$transaction(async (tx) => {
-    const refund = await tx.refund.create({
-      data: {
+  return db.transaction(async (tx) => {
+    const [{ id }] = await tx
+      .insert(refunds)
+      .values({
         orderId,
         paymentId: payment?.id,
-        amount: input.amount,
+        amount: String(input.amount),
         reason: input.reason,
         status: "REQUESTED",
         initiatedById: actorId,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .$returningId();
 
     const fullyRefunded = input.amount >= Number(order.totalAmount);
-    await tx.order.update({
-      where: { id: orderId },
-      data: { paymentStatus: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED" },
-    });
+    await tx.update(orders).set({ paymentStatus: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED", updatedAt: new Date() }).where(eq(orders.id, orderId));
 
+    const refund = await tx.query.refunds.findFirst({ where: eq(refunds.id, id) });
+    if (!refund) throw new NotFoundError("Refund not found");
     return refund;
   });
 }
 
 export async function exportOrdersCsv(query: ListOrdersQuery): Promise<string> {
   const where = buildWhere(query);
-  const orders = await prisma.order.findMany({
+  const items = await db.query.orders.findMany({
     where,
-    include: { user: { select: { name: true, phone: true, email: true } } },
-    orderBy: { createdAt: "desc" },
+    with: { user: { columns: { name: true, phone: true, email: true } } },
+    orderBy: [desc(orders.createdAt)],
   });
 
-  const rows = orders.map((o) => ({
+  const rows = items.map((o) => ({
     orderNumber: o.orderNumber,
     customer: o.user.name ?? "",
     phone: o.user.phone ?? "",
