@@ -1,9 +1,10 @@
-import type { Prisma } from "@prisma/client";
-
 export const DEFAULT_SHIPPING_FEE = 99;
 export const FREE_SHIPPING_THRESHOLD = 999;
 
-export function tierUnitPrice(basePrice: Prisma.Decimal | number, discountPct: Prisma.Decimal | number): number {
+// Drizzle returns MySQL DECIMAL columns as strings (avoids float precision
+// loss); accept that alongside plain numbers so callers don't need to
+// convert at every call site.
+export function tierUnitPrice(basePrice: string | number, discountPct: string | number): number {
   const base = Number(basePrice);
   const discount = Number(discountPct);
   return Math.round(base * (1 - discount / 100));

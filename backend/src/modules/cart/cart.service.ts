@@ -1,15 +1,19 @@
-import { prisma } from "../../lib/prisma";
+import { and, asc, eq } from "drizzle-orm";
+import { db } from "../../db";
+import { cartItems, productImages, packPriceTiers, products } from "../../db/schema";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { tierUnitPrice, computeShipping } from "../../lib/pricing";
 
-const cartItemInclude = {
-  product: {
-    include: {
-      images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
-      packTiers: { orderBy: { tierIndex: "asc" as const } },
+function cartItemWith() {
+  return {
+    product: {
+      with: {
+        images: { limit: 1, orderBy: [asc(productImages.sortOrder)] },
+        packTiers: { orderBy: [asc(packPriceTiers.tierIndex)] },
+      },
     },
-  },
-};
+  };
+}
 
 function serializeCart(items: Awaited<ReturnType<typeof fetchRawCart>>) {
   const serializedItems = items.map((item) => {
@@ -49,10 +53,10 @@ function serializeCart(items: Awaited<ReturnType<typeof fetchRawCart>>) {
 }
 
 function fetchRawCart(userId: number) {
-  return prisma.cartItem.findMany({
-    where: { userId },
-    include: cartItemInclude,
-    orderBy: { createdAt: "asc" },
+  return db.query.cartItems.findMany({
+    where: eq(cartItems.userId, userId),
+    with: cartItemWith(),
+    orderBy: [asc(cartItems.createdAt)],
   });
 }
 
@@ -78,10 +82,10 @@ interface QuoteLineInput {
 export async function quoteCart(items: QuoteLineInput[]) {
   const results = await Promise.all(
     items.map(async (line) => {
-      const product = await prisma.product.findUnique({
-        where: { id: line.productId },
-        include: {
-          images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      const product = await db.query.products.findFirst({
+        where: eq(products.id, line.productId),
+        with: {
+          images: { orderBy: [asc(productImages.sortOrder)] },
           sizes: true,
           packTiers: true,
         },
@@ -145,9 +149,9 @@ interface AddItemInput {
 }
 
 export async function addItem(userId: number, input: AddItemInput) {
-  const product = await prisma.product.findUnique({
-    where: { id: input.productId },
-    include: { sizes: true, packTiers: true },
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, input.productId),
+    with: { sizes: true, packTiers: true },
   });
   if (!product || !product.isActive) throw new NotFoundError("Product not found");
   if (!product.sizes.some((s) => s.size === input.sizeLabel)) {
@@ -157,31 +161,25 @@ export async function addItem(userId: number, input: AddItemInput) {
     throw new BadRequestError("Selected pack tier is not available for this product");
   }
 
-  const existing = await prisma.cartItem.findUnique({
-    where: {
-      userId_productId_sizeLabel_tierIndex: {
-        userId,
-        productId: input.productId,
-        sizeLabel: input.sizeLabel,
-        tierIndex: input.tierIndex,
-      },
-    },
+  const existing = await db.query.cartItems.findFirst({
+    where: and(
+      eq(cartItems.userId, userId),
+      eq(cartItems.productId, input.productId),
+      eq(cartItems.sizeLabel, input.sizeLabel),
+      eq(cartItems.tierIndex, input.tierIndex),
+    ),
   });
 
   if (existing) {
-    await prisma.cartItem.update({
-      where: { id: existing.id },
-      data: { quantity: existing.quantity + input.quantity },
-    });
+    await db.update(cartItems).set({ quantity: existing.quantity + input.quantity, updatedAt: new Date() }).where(eq(cartItems.id, existing.id));
   } else {
-    await prisma.cartItem.create({
-      data: {
-        userId,
-        productId: input.productId,
-        sizeLabel: input.sizeLabel,
-        tierIndex: input.tierIndex,
-        quantity: input.quantity,
-      },
+    await db.insert(cartItems).values({
+      userId,
+      productId: input.productId,
+      sizeLabel: input.sizeLabel,
+      tierIndex: input.tierIndex,
+      quantity: input.quantity,
+      updatedAt: new Date(),
     });
   }
 
@@ -189,28 +187,28 @@ export async function addItem(userId: number, input: AddItemInput) {
 }
 
 export async function updateItemQuantity(userId: number, itemId: number, quantity: number) {
-  const item = await prisma.cartItem.findUnique({ where: { id: itemId } });
+  const item = await db.query.cartItems.findFirst({ where: eq(cartItems.id, itemId) });
   if (!item) throw new NotFoundError("Cart item not found");
   if (item.userId !== userId) throw new ForbiddenError("This cart item does not belong to you");
 
   if (quantity <= 0) {
-    await prisma.cartItem.delete({ where: { id: itemId } });
+    await db.delete(cartItems).where(eq(cartItems.id, itemId));
   } else {
-    await prisma.cartItem.update({ where: { id: itemId }, data: { quantity } });
+    await db.update(cartItems).set({ quantity, updatedAt: new Date() }).where(eq(cartItems.id, itemId));
   }
 
   return getCart(userId);
 }
 
 export async function removeItem(userId: number, itemId: number) {
-  const item = await prisma.cartItem.findUnique({ where: { id: itemId } });
+  const item = await db.query.cartItems.findFirst({ where: eq(cartItems.id, itemId) });
   if (!item) throw new NotFoundError("Cart item not found");
   if (item.userId !== userId) throw new ForbiddenError("This cart item does not belong to you");
 
-  await prisma.cartItem.delete({ where: { id: itemId } });
+  await db.delete(cartItems).where(eq(cartItems.id, itemId));
   return getCart(userId);
 }
 
 export async function clearCart(userId: number) {
-  await prisma.cartItem.deleteMany({ where: { userId } });
+  await db.delete(cartItems).where(eq(cartItems.userId, userId));
 }

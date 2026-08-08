@@ -1,13 +1,15 @@
-import { prisma } from "../../lib/prisma";
+import { and, asc, desc, eq } from "drizzle-orm";
+import { db } from "../../db";
+import { productImages, products, wishlistItems } from "../../db/schema";
 import { NotFoundError } from "../../lib/errors";
 
 export async function listWishlist(userId: number) {
-  const items = await prisma.wishlistItem.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    include: {
+  const items = await db.query.wishlistItems.findMany({
+    where: eq(wishlistItems.userId, userId),
+    orderBy: [desc(wishlistItems.createdAt)],
+    with: {
       product: {
-        include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } },
+        with: { images: { limit: 1, orderBy: [asc(productImages.sortOrder)] } },
       },
     },
   });
@@ -26,19 +28,20 @@ export async function listWishlist(userId: number) {
 }
 
 export async function addToWishlist(userId: number, productId: number) {
-  const product = await prisma.product.findUnique({ where: { id: productId } });
+  const product = await db.query.products.findFirst({ where: eq(products.id, productId) });
   if (!product || !product.isActive) throw new NotFoundError("Product not found");
 
-  await prisma.wishlistItem.upsert({
-    where: { userId_productId: { userId, productId } },
-    update: {},
-    create: { userId, productId },
+  const existing = await db.query.wishlistItems.findFirst({
+    where: and(eq(wishlistItems.userId, userId), eq(wishlistItems.productId, productId)),
   });
+  if (!existing) {
+    await db.insert(wishlistItems).values({ userId, productId });
+  }
 
   return listWishlist(userId);
 }
 
 export async function removeFromWishlist(userId: number, productId: number) {
-  await prisma.wishlistItem.deleteMany({ where: { userId, productId } });
+  await db.delete(wishlistItems).where(and(eq(wishlistItems.userId, userId), eq(wishlistItems.productId, productId)));
   return listWishlist(userId);
 }
