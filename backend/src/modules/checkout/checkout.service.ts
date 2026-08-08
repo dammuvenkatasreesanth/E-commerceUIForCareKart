@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../db";
-import { addresses, coupons, couponRedemptions, cartItems, orderItems, orders, orderStatusHistory, users, type PAYMENT_METHOD } from "../../db/schema";
+import { addresses, coupons, couponRedemptions, cartItems, orderItems, orders, orderStatusHistory, packPriceTiers, productImages, productSizes, products, users, type PAYMENT_METHOD } from "../../db/schema";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { tierUnitPrice, computeShipping } from "../../lib/pricing";
 import { buildOrderNumber } from "../../lib/orderNumber";
@@ -12,10 +12,18 @@ import { orderConfirmationEmail } from "../../providers/email/templates/orderCon
 import { logger } from "../../lib/logger";
 import { loadOrderItems } from "../../lib/orderRelations";
 
+interface BuyNowInput {
+  productId: number;
+  sizeLabel: string;
+  tierIndex: number;
+  quantity: number;
+}
+
 interface CreateOrderInput {
   addressId: number;
   paymentMethod: (typeof PAYMENT_METHOD)[number];
   couponCode?: string;
+  buyNow?: BuyNowInput;
 }
 
 function extractGst(lineTotal: number, gstRatePct: number): number {
@@ -23,11 +31,41 @@ function extractGst(lineTotal: number, gstRatePct: number): number {
   return Math.round(lineTotal - lineTotal / (1 + gstRatePct / 100));
 }
 
+// Builds a single-item "raw cart line" for Buy Now, shaped exactly like
+// getRawCartItems()'s output so the rest of createOrder() doesn't need to
+// know which path it came from.
+async function buildBuyNowLine(buyNow: BuyNowInput) {
+  const [product] = await db.select().from(products).where(eq(products.id, buyNow.productId)).limit(1);
+  if (!product || !product.isActive) throw new NotFoundError("Product not found");
+
+  const [sizes, images, tiers] = await Promise.all([
+    db.select().from(productSizes).where(eq(productSizes.productId, buyNow.productId)),
+    db.select().from(productImages).where(eq(productImages.productId, buyNow.productId)).orderBy(productImages.sortOrder),
+    db.select().from(packPriceTiers).where(eq(packPriceTiers.productId, buyNow.productId)),
+  ]);
+  if (!sizes.some((s) => s.size === buyNow.sizeLabel)) {
+    throw new BadRequestError("Selected size is not available for this product");
+  }
+  if (!tiers.some((t) => t.tierIndex === buyNow.tierIndex)) {
+    throw new BadRequestError("Selected pack tier is not available for this product");
+  }
+
+  return [
+    {
+      productId: buyNow.productId,
+      sizeLabel: buyNow.sizeLabel,
+      tierIndex: buyNow.tierIndex,
+      quantity: buyNow.quantity,
+      product: { ...product, images, packTiers: tiers },
+    },
+  ];
+}
+
 export async function createOrder(userId: number, input: CreateOrderInput) {
   const [user, address, items] = await Promise.all([
     db.query.users.findFirst({ where: eq(users.id, userId) }),
     db.query.addresses.findFirst({ where: eq(addresses.id, input.addressId) }),
-    getRawCartItems(userId),
+    input.buyNow ? buildBuyNowLine(input.buyNow) : getRawCartItems(userId),
   ]);
 
   if (!user) throw new NotFoundError("User not found");
@@ -136,7 +174,10 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
       await tx.update(coupons).set({ usedCount: sql`${coupons.usedCount} + 1` }).where(eq(coupons.id, couponId));
     }
 
-    await tx.delete(cartItems).where(eq(cartItems.userId, userId));
+    // Buy Now never touched the real cart, so there's nothing to clear.
+    if (!input.buyNow) {
+      await tx.delete(cartItems).where(eq(cartItems.userId, userId));
+    }
 
     return id;
   });

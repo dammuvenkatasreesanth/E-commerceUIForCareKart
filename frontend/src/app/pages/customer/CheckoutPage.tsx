@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, MapPin, CreditCard, Zap, Building2, IndianRupee, Plus, Mail, Tag, X } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
@@ -11,9 +12,11 @@ import { useAuthenticateAndMergeCart } from "../../hooks/useAuthenticateAndMerge
 import { OAuthButtons } from "../../components/common/OAuthButtons";
 import { customerLogin, customerSignup, resendVerification } from "../../lib/api/endpoints/auth";
 import { initiatePayment } from "../../lib/api/endpoints/payments";
+import { quoteCart } from "../../lib/api/endpoints/cart";
 import { setPostVerifyRedirect } from "../../lib/postVerifyRedirect";
 import type { Address } from "../../types/address";
 import type { PaymentMethod } from "../../types/order";
+import type { CartQuoteLineItem } from "../../types/cart";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -293,8 +296,19 @@ function CheckoutAuthGate() {
 // ─── Address → Payment → Review, for an already-authenticated user ──────────
 function CheckoutWizard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
-  const { data: cartData, isLoading: cartLoading } = useCart();
+  // "Buy Now" from the product detail page — a single ad-hoc item, priced the
+  // same way a guest's local cart is (POST /cart/quote), that bypasses the
+  // real server cart entirely rather than merging into it.
+  const buyNow = (location.state as { buyNow?: CartQuoteLineItem } | null)?.buyNow;
+  const realCart = useCart();
+  const buyNowQuote = useQuery({
+    queryKey: ["cart-quote", "buy-now", buyNow],
+    queryFn: () => quoteCart([buyNow as CartQuoteLineItem]),
+    enabled: !!buyNow,
+  });
+  const { data: cartData, isLoading: cartLoading } = buyNow ? buyNowQuote : realCart;
   const { data: addresses, isLoading: addressesLoading } = useAddresses();
   const createAddress = useCreateAddress();
   const placeOrder = usePlaceOrder();
@@ -316,10 +330,19 @@ function CheckoutWizard() {
   }, [addresses, selectedAddressId]);
 
   useEffect(() => {
-    if (!cartLoading && (cartData?.items.length ?? 0) === 0) {
+    if (buyNow || cartLoading) return;
+    if ((cartData?.items.length ?? 0) === 0) {
       navigate("/cart", { replace: true });
     }
-  }, [cartLoading, cartData, navigate]);
+  }, [buyNow, cartLoading, cartData, navigate]);
+
+  useEffect(() => {
+    // The item went out of stock or was removed between the PDP and here.
+    if (buyNow && !cartLoading && (cartData?.items.length ?? 0) === 0) {
+      toast.error(cartData?.invalidItems?.[0]?.reason ?? "This item is no longer available");
+      navigate(-1);
+    }
+  }, [buyNow, cartLoading, cartData, navigate]);
 
   const cartItems = cartData?.items ?? [];
   const subtotal = cartData?.subtotal ?? 0;
@@ -351,7 +374,12 @@ function CheckoutWizard() {
     if (!selectedAddressId || isPlacing) return;
     setIsPlacing(true);
     try {
-      const order = await placeOrder.mutateAsync({ addressId: selectedAddressId, paymentMethod: payMethod, couponCode: appliedCoupon ?? undefined });
+      const order = await placeOrder.mutateAsync({
+        addressId: selectedAddressId,
+        paymentMethod: payMethod,
+        couponCode: appliedCoupon ?? undefined,
+        buyNow,
+      });
       if (payMethod === "COD") {
         navigate(`/order-confirmation?orderId=${order.id}`);
         return;

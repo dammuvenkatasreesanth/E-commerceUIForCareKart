@@ -106,6 +106,19 @@ export function ProductDetailPage() {
     );
   };
 
+  const handleBuyNow = () => {
+    navigate("/checkout", {
+      state: {
+        buyNow: {
+          productId: product.id,
+          sizeLabel: selectedSize,
+          tierIndex: activeTier?.tierIndex ?? 0,
+          quantity: qty,
+        },
+      },
+    });
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-4 md:py-6 pb-24 md:pb-8">
       <button onClick={() => navigate("/products")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"><ArrowLeft className="w-4 h-4" /> Back</button>
@@ -217,7 +230,8 @@ export function ProductDetailPage() {
           </div>
 
           <div className="flex gap-3 mb-4">
-            <button onClick={handleAddToCart} className="flex-1 py-3.5 bg-primary text-white font-bold rounded-2xl hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"><ShoppingCart className="w-4 h-4" />Add to Cart</button>
+            <button onClick={handleAddToCart} className="flex-1 py-3.5 bg-white border-2 border-primary text-primary font-bold rounded-2xl hover:bg-secondary transition-colors flex items-center justify-center gap-2 text-sm"><ShoppingCart className="w-4 h-4" />Add to Cart</button>
+            <button onClick={handleBuyNow} className="flex-1 py-3.5 bg-primary text-white font-bold rounded-2xl hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"><Zap className="w-4 h-4" />Buy Now</button>
             <button onClick={handleToggleWishlist} className="px-4 py-3.5 border-2 border-primary text-primary font-bold rounded-2xl hover:bg-secondary transition-colors"><Heart className={`w-5 h-5 ${isWishlisted ? "fill-primary" : ""}`} /></button>
           </div>
           <div className="flex flex-wrap gap-4">
