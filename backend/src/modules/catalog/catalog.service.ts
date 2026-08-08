@@ -1,87 +1,87 @@
-import { prisma } from "../../lib/prisma";
+import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or, type SQL } from "drizzle-orm";
+import { db } from "../../db";
+import { banners, categories, packPriceTiers, productImages, productSizes, products, reviews } from "../../db/schema";
 import { NotFoundError } from "../../lib/errors";
-import type { Prisma } from "@prisma/client";
 import type { listProductsQuerySchema } from "./catalog.schema";
 import type { z } from "zod";
 
 type ListProductsQuery = z.infer<typeof listProductsQuerySchema>;
 
-const productListInclude = {
-  images: { orderBy: { sortOrder: "asc" as const } },
-  sizes: { orderBy: { sortOrder: "asc" as const } },
-  packTiers: { orderBy: { tierIndex: "asc" as const } },
-  category: true,
-} satisfies Prisma.ProductInclude;
+function productWith() {
+  return {
+    images: { orderBy: [asc(productImages.sortOrder)] },
+    sizes: { orderBy: [asc(productSizes.sortOrder)] },
+    packTiers: { orderBy: [asc(packPriceTiers.tierIndex)] },
+    category: true as const,
+  };
+}
 
-function sortToOrderBy(sort: ListProductsQuery["sort"]): Prisma.ProductOrderByWithRelationInput {
+function sortToOrderBy(sort: ListProductsQuery["sort"]) {
   switch (sort) {
     case "price_asc":
-      return { price: "asc" };
+      return asc(products.price);
     case "price_desc":
-      return { price: "desc" };
+      return desc(products.price);
     case "popularity":
       // No dedicated sales-count field yet; review volume is the best available proxy.
-      return { ratingCount: "desc" };
+      return desc(products.ratingCount);
     case "rating":
-      return { ratingAvg: "desc" };
+      return desc(products.ratingAvg);
     case "newest":
     default:
-      return { createdAt: "desc" };
+      return desc(products.createdAt);
   }
 }
 
 export async function listProducts(query: ListProductsQuery) {
-  const where: Prisma.ProductWhereInput = { isActive: true };
+  const conditions: SQL[] = [eq(products.isActive, true)];
 
   if (query.category) {
-    const category = await prisma.category.findUnique({ where: { slug: query.category } });
-    if (category) where.categoryId = category.id;
-    else where.categoryId = -1; // unknown category slug -> empty result set
+    const category = await db.query.categories.findFirst({ where: eq(categories.slug, query.category) });
+    conditions.push(eq(products.categoryId, category?.id ?? -1)); // unknown slug -> empty result set
   }
   if (query.q) {
-    where.OR = [
-      { name: { contains: query.q } },
-      { tagline: { contains: query.q } },
-      { description: { contains: query.q } },
-    ];
+    const term = `%${query.q}%`;
+    conditions.push(or(like(products.name, term), like(products.tagline, term), like(products.description, term))!);
   }
-  if (query.minPrice !== undefined || query.maxPrice !== undefined) {
-    where.price = {
-      ...(query.minPrice !== undefined ? { gte: query.minPrice } : {}),
-      ...(query.maxPrice !== undefined ? { lte: query.maxPrice } : {}),
-    };
-  }
+  if (query.minPrice !== undefined) conditions.push(gte(products.price, String(query.minPrice)));
+  if (query.maxPrice !== undefined) conditions.push(lte(products.price, String(query.maxPrice)));
   if (query.size) {
-    where.sizes = { some: { size: query.size } };
+    conditions.push(
+      inArray(
+        products.id,
+        db.select({ id: productSizes.productId }).from(productSizes).where(eq(productSizes.size, query.size)),
+      ),
+    );
   }
-  if (query.inStock !== undefined) {
-    where.inStock = query.inStock;
-  }
+  if (query.inStock !== undefined) conditions.push(eq(products.inStock, query.inStock));
 
-  const [items, total] = await prisma.$transaction([
-    prisma.product.findMany({
+  const where = and(...conditions);
+
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.products.findMany({
       where,
-      include: productListInclude,
-      orderBy: sortToOrderBy(query.sort),
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
+      with: productWith(),
+      orderBy: [sortToOrderBy(query.sort)],
+      limit: query.limit,
+      offset: (query.page - 1) * query.limit,
     }),
-    prisma.product.count({ where }),
+    db.select({ value: count() }).from(products).where(where),
   ]);
 
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 export async function getProductBySlug(slug: string) {
-  const product = await prisma.product.findUnique({
-    where: { slug },
-    include: {
-      ...productListInclude,
+  const product = await db.query.products.findFirst({
+    where: eq(products.slug, slug),
+    with: {
+      ...productWith(),
       reviews: {
-        where: { status: "APPROVED" },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        include: { user: { select: { name: true } } },
+        where: eq(reviews.status, "APPROVED"),
+        orderBy: [desc(reviews.createdAt)],
+        limit: 10,
+        with: { user: { columns: { name: true } } },
       },
     },
   });
@@ -91,31 +91,27 @@ export async function getProductBySlug(slug: string) {
 }
 
 export async function listCategories() {
-  return prisma.category.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: "asc" },
-  });
+  return db.query.categories.findMany({ where: eq(categories.isActive, true), orderBy: [asc(categories.sortOrder)] });
 }
 
 export async function autosuggest(q: string, limit: number) {
-  const products = await prisma.product.findMany({
-    where: { isActive: true, name: { contains: q } },
-    select: { id: true, name: true, slug: true, images: { take: 1, orderBy: { sortOrder: "asc" } } },
-    take: limit,
+  const rows = await db.query.products.findMany({
+    where: and(eq(products.isActive, true), like(products.name, `%${q}%`)),
+    columns: { id: true, name: true, slug: true },
+    with: { images: { limit: 1, orderBy: [asc(productImages.sortOrder)] } },
+    limit,
   });
-  return products.map((p) => ({ id: p.id, name: p.name, slug: p.slug, image: p.images[0]?.url ?? null }));
+  return rows.map((p) => ({ id: p.id, name: p.name, slug: p.slug, image: p.images[0]?.url ?? null }));
 }
 
 export async function listActiveBanners() {
   const now = new Date();
-  return prisma.banner.findMany({
-    where: {
-      isActive: true,
-      AND: [
-        { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
-        { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
-      ],
-    },
-    orderBy: { sortOrder: "asc" },
+  return db.query.banners.findMany({
+    where: and(
+      eq(banners.isActive, true),
+      or(isNull(banners.startsAt), lte(banners.startsAt, now)),
+      or(isNull(banners.endsAt), gte(banners.endsAt, now)),
+    ),
+    orderBy: [asc(banners.sortOrder)],
   });
 }
