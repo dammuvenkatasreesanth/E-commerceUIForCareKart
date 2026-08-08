@@ -1,6 +1,6 @@
 import { and, avg, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db";
-import { orderItems, orders, products, reviews } from "../../db/schema";
+import { orderItems, orders, products, reviews, users } from "../../db/schema";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors";
 
 interface CreateReviewInput {
@@ -71,28 +71,32 @@ export async function createReview(userId: number, input: CreateReviewInput) {
 export async function listReviewsForProduct(productId: number, page: number, limit: number) {
   const where = and(eq(reviews.productId, productId), eq(reviews.status, "APPROVED"));
 
-  const [items, [{ value: total }]] = await Promise.all([
-    db.query.reviews.findMany({
-      where,
-      with: { user: { columns: { name: true } } },
-      orderBy: [desc(reviews.createdAt)],
-      limit,
-      offset: (page - 1) * limit,
-    }),
+  // A plain LEFT JOIN (not Drizzle's relational with: API, which generates
+  // LEFT JOIN LATERAL — unsupported on production's MariaDB) is fine here
+  // since it's a single flat "one" lookup, not a nested "many" collection.
+  const [rows, [{ value: total }]] = await Promise.all([
+    db
+      .select({
+        id: reviews.id,
+        rating: reviews.rating,
+        title: reviews.title,
+        body: reviews.body,
+        isVerifiedPurchase: reviews.isVerifiedPurchase,
+        helpfulCount: reviews.helpfulCount,
+        createdAt: reviews.createdAt,
+        authorName: users.name,
+      })
+      .from(reviews)
+      .leftJoin(users, eq(reviews.userId, users.id))
+      .where(where)
+      .orderBy(desc(reviews.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit),
     db.select({ value: count() }).from(reviews).where(where),
   ]);
 
   return {
-    items: items.map((r) => ({
-      id: r.id,
-      rating: r.rating,
-      title: r.title,
-      body: r.body,
-      isVerifiedPurchase: r.isVerifiedPurchase,
-      helpfulCount: r.helpfulCount,
-      authorName: r.user.name ?? "Anonymous",
-      createdAt: r.createdAt,
-    })),
+    items: rows.map((r) => ({ ...r, authorName: r.authorName ?? "Anonymous" })),
     total,
     page,
     limit,

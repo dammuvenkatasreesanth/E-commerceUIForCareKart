@@ -1,18 +1,50 @@
-import { asc, count, desc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
+import { asc, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
-import { orders, supportTickets, ticketNotes, type TICKET_STATUS, type TICKET_PRIORITY } from "../../db/schema";
+import { orders, supportTickets, ticketNotes, users, type TICKET_STATUS, type TICKET_PRIORITY } from "../../db/schema";
 import { ForbiddenError, NotFoundError } from "../../lib/errors";
 import { buildTicketNumber } from "../../lib/ticketNumber";
+import { indexBy } from "../../lib/batchLoad";
 
 type TicketStatus = (typeof TICKET_STATUS)[number];
 type TicketPriority = (typeof TICKET_PRIORITY)[number];
+type TicketRow = typeof supportTickets.$inferSelect;
 
-function ticketWith() {
-  return {
-    notes: { orderBy: [asc(ticketNotes.createdAt)] },
-    user: { columns: { id: true, name: true, phone: true, email: true } },
-    assignedTo: { columns: { id: true, name: true } },
-  };
+const assignedUsers = alias(users, "assignedUsers");
+
+// MariaDB (production) doesn't support the LEFT JOIN LATERAL SQL Drizzle's
+// relational with: API generates, so "one" relations (user, assignedTo) use a
+// plain self-joined-twice SELECT and the "many" relation (notes) is batched
+// separately with a WHERE IN, same pattern as orders/catalog.
+async function withUserAndAssignee(rows: TicketRow[]) {
+  if (rows.length === 0) return [];
+  const userIds = [...new Set(rows.flatMap((r) => [r.userId, r.assignedToId]).filter((id): id is number => id != null))];
+  const userRows =
+    userIds.length > 0
+      ? await db.select({ id: users.id, name: users.name, phone: users.phone, email: users.email }).from(users).where(inArray(users.id, userIds))
+      : [];
+  const userById = indexBy(userRows, (u) => u.id);
+
+  return rows.map((r) => {
+    const assignee = r.assignedToId != null ? userById.get(r.assignedToId) : undefined;
+    return {
+      ...r,
+      user: userById.get(r.userId) ?? null,
+      assignedTo: assignee ? { id: assignee.id, name: assignee.name } : null,
+    };
+  });
+}
+
+async function withNotes(rows: Awaited<ReturnType<typeof withUserAndAssignee>>) {
+  if (rows.length === 0) return [];
+  const notes = await db.select().from(ticketNotes).where(inArray(ticketNotes.ticketId, rows.map((r) => r.id))).orderBy(asc(ticketNotes.createdAt));
+  const notesByTicket = new Map<number, typeof notes>();
+  for (const note of notes) {
+    const list = notesByTicket.get(note.ticketId);
+    if (list) list.push(note);
+    else notesByTicket.set(note.ticketId, [note]);
+  }
+  return rows.map((r) => ({ ...r, notes: notesByTicket.get(r.id) ?? [] }));
 }
 
 export async function createTicket(userId: number, input: { subject: string; description: string; orderId?: number; priority: TicketPriority }) {
@@ -47,10 +79,12 @@ export async function listTicketsForUser(userId: number) {
 }
 
 export async function getTicketForUser(userId: number, id: number) {
-  const ticket = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, id), with: ticketWith() });
-  if (!ticket) throw new NotFoundError("Ticket not found");
-  if (ticket.userId !== userId) throw new ForbiddenError("This ticket does not belong to you");
-  return ticket;
+  const row = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, id) });
+  if (!row) throw new NotFoundError("Ticket not found");
+  if (row.userId !== userId) throw new ForbiddenError("This ticket does not belong to you");
+
+  const [withRelations] = await withNotes(await withUserAndAssignee([row]));
+  return withRelations;
 }
 
 // ── Staff (Employee/Admin) access ───────────────────────────────────────
@@ -58,23 +92,39 @@ export async function getTicketForUser(userId: number, id: number) {
 export async function listAllTickets(query: { status?: TicketStatus; page: number; limit: number }) {
   const where = query.status ? eq(supportTickets.status, query.status) : undefined;
 
-  const [items, [{ value: total }]] = await Promise.all([
-    db.query.supportTickets.findMany({
-      where,
-      with: { user: { columns: { name: true, phone: true } }, assignedTo: { columns: { name: true } } },
-      orderBy: [desc(supportTickets.createdAt)],
-      limit: query.limit,
-      offset: (query.page - 1) * query.limit,
-    }),
+  const [rows, [{ value: total }]] = await Promise.all([
+    db
+      .select({
+        ticket: supportTickets,
+        userName: users.name,
+        userPhone: users.phone,
+        assignedName: assignedUsers.name,
+      })
+      .from(supportTickets)
+      .leftJoin(users, eq(supportTickets.userId, users.id))
+      .leftJoin(assignedUsers, eq(supportTickets.assignedToId, assignedUsers.id))
+      .where(where)
+      .orderBy(desc(supportTickets.createdAt))
+      .limit(query.limit)
+      .offset((query.page - 1) * query.limit),
     db.select({ value: count() }).from(supportTickets).where(where),
   ]);
+
+  const items = rows.map((r) => ({
+    ...r.ticket,
+    user: { name: r.userName, phone: r.userPhone },
+    assignedTo: r.assignedName != null ? { name: r.assignedName } : null,
+  }));
+
   return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 export async function getTicketAny(id: number) {
-  const ticket = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, id), with: ticketWith() });
-  if (!ticket) throw new NotFoundError("Ticket not found");
-  return ticket;
+  const row = await db.query.supportTickets.findFirst({ where: eq(supportTickets.id, id) });
+  if (!row) throw new NotFoundError("Ticket not found");
+
+  const [withRelations] = await withNotes(await withUserAndAssignee([row]));
+  return withRelations;
 }
 
 export async function addNote(ticketId: number, authorId: number, note: string, isInternal: boolean) {
