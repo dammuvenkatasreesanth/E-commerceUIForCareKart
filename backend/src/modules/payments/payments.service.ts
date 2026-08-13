@@ -79,8 +79,8 @@ async function applyPaymentResult(payment: Payment, result: phonepe.PhonePeCallb
   }
 }
 
-export async function handleCallback(authorizationHeader: string | undefined, rawBody: string): Promise<void> {
-  const result = phonepe.verifyAndDecodeCallback(authorizationHeader, rawBody);
+export async function handleCallback(xVerifyHeader: string | undefined, base64Response: string): Promise<void> {
+  const result = phonepe.verifyAndDecodeCallback(xVerifyHeader, base64Response);
 
   const payment = await db.query.payments.findFirst({ where: eq(payments.merchantTransactionId, result.merchantTransactionId) });
   if (!payment) {

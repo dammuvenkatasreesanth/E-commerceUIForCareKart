@@ -35,11 +35,11 @@ const envSchema = z.object({
   SMTP_PASSWORD: z.string().optional().default(""),
   SMTP_FROM: z.string().default("CareKart <no-reply@carekart.example>"),
 
-  PHONEPE_CLIENT_ID: z.string().optional().default(""),
-  PHONEPE_CLIENT_SECRET: z.string().optional().default(""),
-  PHONEPE_CLIENT_VERSION: z.coerce.number().default(1),
-  PHONEPE_WEBHOOK_USERNAME: z.string().optional().default(""),
-  PHONEPE_WEBHOOK_PASSWORD: z.string().optional().default(""),
+  // V1 "Standard Checkout" (Salt Key + Salt Index) — this merchant account is
+  // provisioned on V1, not the newer V2 (Client ID/Secret) flow.
+  PHONEPE_MERCHANT_ID: z.string().optional().default(""),
+  PHONEPE_SALT_KEY: z.string().optional().default(""),
+  PHONEPE_SALT_INDEX: z.coerce.number().default(1),
   PHONEPE_ENV: z.enum(["UAT", "PROD"]).default("UAT"),
 
   // Our own backend's publicly reachable base URL — PhonePe redirects the browser
