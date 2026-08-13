@@ -82,7 +82,10 @@ export async function initiatePayment(input: InitiatePaymentInput): Promise<Init
     return { redirectUrl };
   } catch (err) {
     logger.error({ err }, "PhonePe initiate payment failed");
-    throw new AppError("Failed to initiate payment. Please try again.", 502);
+    // TEMPORARY: surfacing PhonePe's actual error response to diagnose a live
+    // integration issue — revert to the generic message once resolved.
+    const detail = axios.isAxiosError(err) ? ` [DEBUG ${err.response?.status}: ${JSON.stringify(err.response?.data)}]` : ` [DEBUG ${err instanceof Error ? err.message : String(err)}]`;
+    throw new AppError(`Failed to initiate payment. Please try again.${detail}`, 502);
   }
 }
 
