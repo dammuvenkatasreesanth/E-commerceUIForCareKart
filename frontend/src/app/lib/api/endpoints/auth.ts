@@ -38,10 +38,6 @@ export function googleLogin(idToken: string): Promise<AuthResponse & { isNewUser
   return api.post("/auth/google", { idToken });
 }
 
-export function facebookLogin(accessToken: string, userId: string): Promise<AuthResponse & { isNewUser: boolean }> {
-  return api.post("/auth/facebook", { accessToken, userId });
-}
-
 export function staffLogin(email: string, password: string): Promise<AuthResponse> {
   return api.post("/auth/staff/login", { email, password });
 }
