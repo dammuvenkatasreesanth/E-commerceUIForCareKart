@@ -5,6 +5,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors
 import { generateInvoicePdf } from "../../providers/pdf/invoice.pdf";
 import * as cartService from "../cart/cart.service";
 import * as paymentsService from "../payments/payments.service";
+import { cancelShipmentForOrder, createReturnShipmentForOrder } from "../shipping/shipping.service";
 import { logger } from "../../lib/logger";
 import { loadOrderItems, loadOrderStatusHistory } from "../../lib/orderRelations";
 
@@ -119,6 +120,9 @@ export async function cancelOrder(actor: { id: number; role: Role }, orderId: nu
     const updated = await tx.query.orders.findFirst({ where: eq(orders.id, orderId) });
     if (!updated) throw new NotFoundError("Order not found");
     return updated;
+  }).then(async (updated) => {
+    if (order.trackingId) await cancelShipmentForOrder(order.trackingId);
+    return updated;
   });
 }
 
@@ -160,6 +164,11 @@ export async function requestReturn(
 
     const returnRequest = await tx.query.returnRequests.findFirst({ where: eq(returnRequests.id, id) });
     if (!returnRequest) throw new NotFoundError("Return request not found");
+    return returnRequest;
+  }).then((returnRequest) => {
+    createReturnShipmentForOrder(orderId, returnRequest.id).catch((err) => {
+      logger.error({ err, orderId, returnRequestId: returnRequest.id }, "Failed to create Delhivery reverse-pickup shipment");
+    });
     return returnRequest;
   });
 }

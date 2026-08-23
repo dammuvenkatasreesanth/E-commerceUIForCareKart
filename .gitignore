@@ -19,6 +19,9 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 
+# MCP server config — contains live credentials (e.g. delhivery-one)
+.mcp.json
+
 # Uploaded files
 backend/uploads/
 

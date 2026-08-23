@@ -11,6 +11,7 @@ import { sendMail } from "../../providers/email/mailer";
 import { orderConfirmationEmail } from "../../providers/email/templates/orderConfirmation";
 import { logger } from "../../lib/logger";
 import { loadOrderItems } from "../../lib/orderRelations";
+import { createShipmentForOrder } from "../shipping/shipping.service";
 
 interface BuyNowInput {
   productId: number;
@@ -190,6 +191,9 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
   if (isCod) {
     await sendOrderConfirmation(order.id).catch((err) => {
       logger.error({ err, orderId: order.id }, "Failed to send order confirmation email");
+    });
+    createShipmentForOrder(order.id).catch((err) => {
+      logger.error({ err, orderId: order.id }, "Failed to create Delhivery shipment");
     });
   }
 

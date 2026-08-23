@@ -42,6 +42,14 @@ const envSchema = z.object({
   PHONEPE_SALT_INDEX: z.coerce.number().default(1),
   PHONEPE_ENV: z.enum(["UAT", "PROD"]).default("UAT"),
 
+  // Delhivery ("Authorization: Token X" REST API) — auto-creates a shipment
+  // when an order is confirmed, and tracks it. pickup_location must exactly
+  // match (case-sensitive) a warehouse name already registered on the account.
+  DELHIVERY_API_TOKEN: z.string().optional().default(""),
+  DELHIVERY_PICKUP_LOCATION: z.string().optional().default(""),
+  DELHIVERY_SELLER_GST_TIN: z.string().optional().default(""),
+  DELHIVERY_ENV: z.enum(["STAGING", "PROD"]).default("STAGING"),
+
   // Our own backend's publicly reachable base URL — PhonePe redirects the browser
   // here (GET) and calls back here (server-to-server POST) after payment.
   PUBLIC_API_BASE_URL: z.string().default("http://localhost:4000/api/v1"),

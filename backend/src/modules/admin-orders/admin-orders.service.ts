@@ -5,6 +5,7 @@ import { orderStatusHistory, orders, payments, refunds, users, type ORDER_STATUS
 import { BadRequestError, NotFoundError } from "../../lib/errors";
 import { indexBy } from "../../lib/batchLoad";
 import { loadOrderItems, loadOrderNotes, loadOrderPayments, loadOrderRefunds, loadOrderReturns, loadOrderStatusHistory } from "../../lib/orderRelations";
+import { refreshTrackingNow } from "../shipping/shipping.service";
 
 type OrderStatus = (typeof ORDER_STATUS)[number];
 type PaymentStatus = (typeof PAYMENT_STATUS)[number];
@@ -152,6 +153,13 @@ export async function initiateRefund(actorId: number, orderId: number, input: { 
     if (!refund) throw new NotFoundError("Refund not found");
     return refund;
   });
+}
+
+export async function refreshShipmentTracking(orderId: number) {
+  const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
+  if (!order) throw new NotFoundError("Order not found");
+  if (!order.trackingId) throw new BadRequestError("This order has no Delhivery tracking ID yet");
+  return refreshTrackingNow(orderId);
 }
 
 export async function exportOrdersCsv(query: ListOrdersQuery): Promise<string> {

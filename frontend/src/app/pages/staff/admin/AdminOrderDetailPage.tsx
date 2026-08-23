@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { ArrowLeft, Package, User, MapPin, History, StickyNote, RotateCcw } from "lucide-react";
+import { ArrowLeft, Package, User, MapPin, History, StickyNote, RotateCcw, Truck, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
 import { StatusBadge } from "../../../components/common/StatusBadge";
-import { useAdminOrder, useUpdateOrderStatus, useInitiateRefund } from "../../../hooks/admin/useAdminOrders";
+import { useAdminOrder, useUpdateOrderStatus, useInitiateRefund, useRefreshShipmentTracking } from "../../../hooks/admin/useAdminOrders";
 import type { OrderStatus } from "../../../types/order";
 
 const ORDER_STATUSES: OrderStatus[] = [
@@ -32,6 +32,7 @@ export function AdminOrderDetailPage() {
 
   const updateStatus = useUpdateOrderStatus();
   const initiateRefund = useInitiateRefund();
+  const refreshTracking = useRefreshShipmentTracking();
 
   const [showStatusForm, setShowStatusForm] = useState(false);
   const [statusValue, setStatusValue] = useState<OrderStatus>("PENDING");
@@ -204,6 +205,28 @@ export function AdminOrderDetailPage() {
         </div>
 
         <div className="space-y-4">
+          {/* Shipping / tracking */}
+          {order.trackingId && (
+            <div className="bg-white border border-border rounded-2xl p-5">
+              <h2 className="font-bold text-sm mb-3 flex items-center gap-2"><Truck className="w-4 h-4 text-primary" />Shipping</h2>
+              <p className="text-sm font-semibold">{order.carrier ?? "Manual"} · {order.trackingId}</p>
+              {order.shippingStatus && <p className="text-xs text-muted-foreground mt-0.5">{order.shippingStatus}</p>}
+              {order.shippingLastCheckedAt && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">Last checked {new Date(order.shippingLastCheckedAt).toLocaleString()}</p>
+              )}
+              {order.carrier === "DELHIVERY" && (
+                <button
+                  onClick={() => refreshTracking.mutate(order.id, { onError: (err: Error) => toast.error(err.message) })}
+                  disabled={refreshTracking.isPending}
+                  className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshTracking.isPending ? "animate-spin" : ""}`} />
+                  {refreshTracking.isPending ? "Refreshing…" : "Refresh tracking"}
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Customer */}
           <div className="bg-white border border-border rounded-2xl p-5">
             <h2 className="font-bold text-sm mb-3 flex items-center gap-2"><User className="w-4 h-4 text-primary" />Customer</h2>
@@ -240,16 +263,22 @@ export function AdminOrderDetailPage() {
               <label className="block text-xs font-semibold mb-1">Note (optional)</label>
               <textarea value={statusNote} onChange={(e) => setStatusNote(e.target.value)} rows={3} className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm resize-none" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1">Tracking ID (optional)</label>
-                <input value={trackingId} onChange={(e) => setTrackingId(e.target.value)} className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+            {order.carrier === "DELHIVERY" ? (
+              <p className="text-xs text-muted-foreground bg-muted rounded-xl px-3 py-2">
+                Tracking is managed automatically by Delhivery ({order.trackingId}) — use "Refresh tracking" instead of editing it here.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Tracking ID (optional)</label>
+                  <input value={trackingId} onChange={(e) => setTrackingId(e.target.value)} className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Carrier (optional)</label>
+                  <input value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Carrier (optional)</label>
-                <input value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
-              </div>
-            </div>
+            )}
           </div>
           <DialogFooter>
             <button onClick={() => setShowStatusForm(false)} className="px-4 py-2 border border-border rounded-xl text-sm font-semibold">Cancel</button>

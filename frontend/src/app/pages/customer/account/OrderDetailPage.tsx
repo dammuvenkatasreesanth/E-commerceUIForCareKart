@@ -116,6 +116,14 @@ export function OrderDetailPage() {
       {/* Shipment tracking */}
       <div className="bg-white border border-border rounded-2xl p-5 mb-4">
         <h2 className="font-bold text-sm mb-4 flex items-center gap-2"><Truck className="w-4 h-4 text-primary" />Shipment Tracking</h2>
+        {order.trackingId && (
+          <div className="flex items-center justify-between gap-3 bg-muted rounded-xl px-3 py-2.5 mb-4">
+            <div>
+              <p className="text-sm font-semibold">{order.carrier ?? "Courier"} · {order.trackingId}</p>
+              {order.shippingStatus && <p className="text-xs text-muted-foreground mt-0.5">{order.shippingStatus}</p>}
+            </div>
+          </div>
+        )}
         {isTerminalOffPath ? (
           <div className="flex items-start gap-3">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${order.status === "CANCELLED" ? "bg-red-100" : "bg-amber-100"}`}>

@@ -4,6 +4,7 @@ import { orders, orderStatusHistory, payments, type PAYMENT_TXN_STATUS } from ".
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import * as phonepe from "../../providers/payment/phonepe.provider";
 import { sendOrderConfirmation } from "../checkout/checkout.service";
+import { createShipmentForOrder } from "../shipping/shipping.service";
 import { logger } from "../../lib/logger";
 
 type Payment = typeof payments.$inferSelect;
@@ -75,6 +76,9 @@ async function applyPaymentResult(payment: Payment, result: phonepe.PhonePeCallb
   if (result.success) {
     await sendOrderConfirmation(payment.orderId).catch((err) => {
       logger.error({ err, orderId: payment.orderId }, "Failed to send order confirmation email after payment");
+    });
+    createShipmentForOrder(payment.orderId).catch((err) => {
+      logger.error({ err, orderId: payment.orderId }, "Failed to create Delhivery shipment");
     });
   }
 }

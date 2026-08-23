@@ -59,6 +59,8 @@ export interface Order {
   shipPincode: string;
   trackingId: string | null;
   carrier: string | null;
+  shippingStatus: string | null;
+  shippingLastCheckedAt: string | null;
   cancelReason: string | null;
   cancelledAt: string | null;
   placedAt: string;

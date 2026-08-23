@@ -26,3 +26,11 @@ export function useInitiateRefund() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
   });
 }
+
+export function useRefreshShipmentTracking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.refreshShipmentTracking(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
+  });
+}

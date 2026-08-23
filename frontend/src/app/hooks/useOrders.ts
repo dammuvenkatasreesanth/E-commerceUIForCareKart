@@ -15,12 +15,17 @@ export function useOrders() {
   });
 }
 
+const LIVE_TRACKING_STATUSES = ["SHIPPED", "OUT_FOR_DELIVERY"];
+
 export function useOrder(id: number | undefined) {
   const { status } = useAuth();
   return useQuery({
     queryKey: orderKey(id ?? -1),
     queryFn: () => ordersApi.getOrder(id as number),
     enabled: status === "authenticated" && !!id,
+    // While a shipment is actually moving, poll so the tracking status/timeline
+    // updates without the customer having to manually refresh the page.
+    refetchInterval: (query) => (query.state.data && LIVE_TRACKING_STATUSES.includes(query.state.data.status) ? 60_000 : false),
   });
 }
 

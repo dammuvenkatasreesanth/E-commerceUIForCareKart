@@ -13,4 +13,5 @@ adminOrdersRouter.get("/export", validate({ query: listOrdersQuerySchema }), asy
 adminOrdersRouter.get("/", validate({ query: listOrdersQuerySchema }), asyncHandler(controller.list));
 adminOrdersRouter.get("/:id", asyncHandler(controller.getOne));
 adminOrdersRouter.patch("/:id/status", validate({ body: updateOrderStatusSchema }), asyncHandler(controller.updateStatus));
+adminOrdersRouter.post("/:id/refresh-tracking", asyncHandler(controller.refreshTracking));
 adminOrdersRouter.post("/:id/refund", validate({ body: initiateRefundSchema }), asyncHandler(controller.refund));

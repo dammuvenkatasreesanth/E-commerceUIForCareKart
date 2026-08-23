@@ -20,6 +20,12 @@ export async function updateStatus(req: Request, res: Response) {
   res.json(order);
 }
 
+export async function refreshTracking(req: Request, res: Response) {
+  const id = parseIdParam(req.params.id);
+  const order = await service.refreshShipmentTracking(id);
+  res.json(order);
+}
+
 export async function refund(req: Request, res: Response) {
   const id = parseIdParam(req.params.id);
   const refundRecord = await service.initiateRefund(req.user!.id, id, req.body);
