@@ -24,9 +24,6 @@ export const createProductSchema = z.object({
   gstRate: z.number().min(0).max(28).default(18),
   hsnCode: z.string().optional(),
   weightGrams: z.number().int().positive().optional(),
-  lengthCm: z.number().int().positive().optional(),
-  widthCm: z.number().int().positive().optional(),
-  heightCm: z.number().int().positive().optional(),
   sizes: z.array(z.string().min(1)).min(1),
   packTiers: z.array(packTierSchema).optional(),
 });

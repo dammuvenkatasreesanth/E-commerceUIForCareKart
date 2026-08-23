@@ -4,6 +4,7 @@ import { orders, orderStatusHistory, returnRequests, type ORDER_STATUS } from ".
 import { logger } from "../../lib/logger";
 import { loadOrderItems } from "../../lib/orderRelations";
 import * as delhivery from "../../providers/shipping/delhivery.provider";
+import { listBoxSizes } from "../admin-shipping/admin-shipping.service";
 
 type OrderStatus = (typeof ORDER_STATUS)[number];
 type OrderRow = typeof orders.$inferSelect;
@@ -21,16 +22,26 @@ function totalWeightGrams(items: { weightGrams: number | null; quantity: number 
   return items.reduce((sum, i) => sum + (i.weightGrams ?? DEFAULT_ITEM_WEIGHT_GRAMS) * i.quantity, 0);
 }
 
-// Dimensions are per-shipment (one box), not summable like weight — take the
-// largest item along each axis as a stand-in for the packed box size. Not
-// exact for multi-item orders, but far better than sending nothing.
-function shipmentDimensionsCm(items: { lengthCm: number | null; widthCm: number | null; heightCm: number | null }[]) {
-  const max = (values: (number | null)[]) => values.reduce<number | undefined>((m, v) => (v != null && (m == null || v > m) ? v : m), undefined);
-  return {
-    lengthCm: max(items.map((i) => i.lengthCm)),
-    widthCm: max(items.map((i) => i.widthCm)),
-    heightCm: max(items.map((i) => i.heightCm)),
-  };
+// Looks up the admin-configured box size for a given box count — rounds UP
+// to the next configured size (never sends a box smaller than what's
+// actually being packed), capping at the largest configured size for
+// anything beyond it. Returns undefined if nothing's configured yet, so a
+// shipment can still go out without dimensions rather than fail outright.
+async function boxDimensionsFor(boxCount: number) {
+  const sizes = await listBoxSizes();
+  if (sizes.length === 0) return undefined;
+  const match = sizes.find((s) => s.boxCount >= boxCount) ?? sizes[sizes.length - 1];
+  return { lengthCm: match.lengthCm, widthCm: match.widthCm, heightCm: match.heightCm };
+}
+
+// One shipment = one box, so every line's boxes go into the same box size
+// lookup — total box count is packQty (boxes per pack) × quantity (packs
+// ordered), summed across every line in the order. This is what grows as a
+// customer increases quantity in the cart, matching how the admin-managed
+// box-size table is keyed ("Pack of 10" means ten boxes going into one shipment).
+async function shipmentDimensionsCm(items: { packQty: number; quantity: number }[]) {
+  const totalBoxes = items.reduce((sum, i) => sum + i.packQty * i.quantity, 0);
+  return boxDimensionsFor(Math.max(totalBoxes, 1));
 }
 
 // Fires right after an order becomes CONFIRMED (COD placement or online
@@ -57,7 +68,7 @@ export async function createShipmentForOrder(orderId: number): Promise<void> {
     codAmount: order.paymentMethod === "COD" ? Number(order.totalAmount) : undefined,
     items: buildItems(items),
     weightGrams: totalWeightGrams(items),
-    ...shipmentDimensionsCm(items),
+    ...(await shipmentDimensionsCm(items)),
   });
 
   await db.update(orders).set({ trackingId: waybill, carrier: "DELHIVERY", updatedAt: new Date() }).where(eq(orders.id, orderId));
@@ -85,7 +96,7 @@ export async function createReturnShipmentForOrder(orderId: number, returnReques
     pincode: order.shipPincode,
     items: buildItems(items),
     weightGrams: totalWeightGrams(items),
-    ...shipmentDimensionsCm(items),
+    ...(await shipmentDimensionsCm(items)),
   });
 
   await db.update(returnRequests).set({ returnWaybill: waybill, updatedAt: new Date() }).where(eq(returnRequests.id, returnRequestId));

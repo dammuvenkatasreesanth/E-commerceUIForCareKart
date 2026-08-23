@@ -12,6 +12,7 @@ import { ordersRouter } from "../modules/orders/orders.routes";
 import { paymentsRouter } from "../modules/payments/payments.routes";
 import { adminCatalogRouter } from "../modules/admin-catalog/admin-catalog.routes";
 import { adminOrdersRouter } from "../modules/admin-orders/admin-orders.routes";
+import { adminShippingRouter } from "../modules/admin-shipping/admin-shipping.routes";
 import { adminCustomersRouter } from "../modules/admin-customers/admin-customers.routes";
 import { adminStaffRouter, adminAuditLogRouter } from "../modules/admin-staff/admin-staff.routes";
 import {
@@ -41,6 +42,7 @@ apiRouter.use("/orders", ordersRouter);
 apiRouter.use("/payments", paymentsRouter);
 apiRouter.use("/admin", adminCatalogRouter);
 apiRouter.use("/admin/orders", adminOrdersRouter);
+apiRouter.use("/admin/shipping", adminShippingRouter);
 apiRouter.use("/admin/customers", adminCustomersRouter);
 apiRouter.use("/admin/staff", adminStaffRouter);
 apiRouter.use("/admin/audit-log", adminAuditLogRouter);

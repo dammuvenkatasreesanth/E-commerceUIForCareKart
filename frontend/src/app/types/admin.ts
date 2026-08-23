@@ -11,6 +11,22 @@ export interface Paginated<T> {
 
 export type StaffStatus = "ACTIVE" | "BLOCKED" | "SUSPENDED";
 
+// ─── Shipping ─────────────────────────────────────────────────────────────
+export interface BoxSize {
+  id: number;
+  boxCount: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+}
+
+export interface BoxSizeInput {
+  boxCount: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+}
+
 // ─── Catalog ──────────────────────────────────────────────────────────────
 export interface AdminCategory {
   id: number;
@@ -63,9 +79,6 @@ export interface AdminProduct {
   gstRate: string;
   hsnCode: string | null;
   weightGrams: number | null;
-  lengthCm: number | null;
-  widthCm: number | null;
-  heightCm: number | null;
   isActive: boolean;
   inStock: boolean;
   ratingAvg: string;
@@ -92,9 +105,6 @@ export interface AdminProductInput {
   gstRate?: number;
   hsnCode?: string;
   weightGrams?: number;
-  lengthCm?: number;
-  widthCm?: number;
-  heightCm?: number;
   sizes: string[];
   packTiers?: { tierIndex: number; label: string; packQty: number; discountPct: number; tag?: string }[];
   isActive?: boolean;

@@ -136,9 +136,6 @@ export const products = mysqlTable("Product", {
   gstRate: decimal("gstRate", { precision: 4, scale: 2 }).notNull().default("18.00"),
   hsnCode: varchar("hsnCode", { length: 191 }),
   weightGrams: int("weightGrams"),
-  lengthCm: int("lengthCm"),
-  widthCm: int("widthCm"),
-  heightCm: int("heightCm"),
   isActive: boolean("isActive").notNull().default(true),
   inStock: boolean("inStock").notNull().default(true),
   ratingAvg: decimal("ratingAvg", { precision: 3, scale: 2 }).notNull().default("0.00"),
@@ -278,9 +275,6 @@ export const orderItems = mysqlTable("OrderItem", {
   gstRate: decimal("gstRate", { precision: 4, scale: 2 }).notNull(),
   hsnCode: varchar("hsnCode", { length: 191 }),
   weightGrams: int("weightGrams"),
-  lengthCm: int("lengthCm"),
-  widthCm: int("widthCm"),
-  heightCm: int("heightCm"),
 }, (t) => [index("OrderItem_orderId_idx").on(t.orderId)]);
 
 export const orderStatusHistory = mysqlTable("OrderStatusHistory", {
@@ -378,6 +372,19 @@ export const storeSettings = mysqlTable("StoreSetting", {
   key: varchar("key", { length: 191 }).primaryKey(),
   value: json("value").notNull(),
   updatedAt: updatedAt(),
+});
+
+// Global packing standard (not per-product) — the warehouse packs strictly
+// to this table by total box count, regardless of which product is shipping.
+// Used to pick the courier shipment's declared dimensions.
+export const shippingBoxSizes = mysqlTable("ShippingBoxSize", {
+  id: int("id").autoincrement().primaryKey(),
+  boxCount: int("boxCount").notNull().unique(),
+  lengthCm: int("lengthCm").notNull(),
+  widthCm: int("widthCm").notNull(),
+  heightCm: int("heightCm").notNull(),
+  updatedAt: updatedAt(),
+  createdAt: createdAt(),
 });
 
 export const emailCampaigns = mysqlTable("EmailCampaign", {

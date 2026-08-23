@@ -95,9 +95,6 @@ interface ProductInput {
   gstRate: number;
   hsnCode?: string;
   weightGrams?: number;
-  lengthCm?: number;
-  widthCm?: number;
-  heightCm?: number;
   sizes: string[];
   packTiers?: PackTierInput[];
 }
@@ -129,9 +126,6 @@ export async function createProduct(input: ProductInput) {
         gstRate: String(input.gstRate),
         hsnCode: input.hsnCode,
         weightGrams: input.weightGrams,
-        lengthCm: input.lengthCm,
-        widthCm: input.widthCm,
-        heightCm: input.heightCm,
         updatedAt: new Date(),
       })
       .$returningId();
@@ -169,9 +163,6 @@ export async function updateProduct(id: number, input: Partial<ProductInput> & {
     gstRate: input.gstRate !== undefined ? String(input.gstRate) : undefined,
     hsnCode: input.hsnCode,
     weightGrams: input.weightGrams,
-    lengthCm: input.lengthCm,
-    widthCm: input.widthCm,
-    heightCm: input.heightCm,
     isActive: input.isActive,
     inStock: input.inStock,
     price: input.price !== undefined ? String(input.price) : undefined,
@@ -296,9 +287,6 @@ interface CsvRow {
   gstRate?: string;
   hsnCode?: string;
   weightGrams?: string;
-  lengthCm?: string;
-  widthCm?: string;
-  heightCm?: string;
   sizes?: string;
   features?: string;
   inStock?: string;
@@ -342,9 +330,6 @@ export async function importProductsCsv(fileBuffer: Buffer): Promise<{ created: 
           gstRate: row.gstRate ? Number(row.gstRate) : undefined,
           hsnCode: row.hsnCode,
           weightGrams: row.weightGrams ? Number(row.weightGrams) : undefined,
-          lengthCm: row.lengthCm ? Number(row.lengthCm) : undefined,
-          widthCm: row.widthCm ? Number(row.widthCm) : undefined,
-          heightCm: row.heightCm ? Number(row.heightCm) : undefined,
           sizes,
           inStock: row.inStock ? row.inStock.toLowerCase() === "true" : undefined,
         });
@@ -368,9 +353,6 @@ export async function importProductsCsv(fileBuffer: Buffer): Promise<{ created: 
               gstRate: row.gstRate ? String(Number(row.gstRate)) : "18.00",
               hsnCode: row.hsnCode,
               weightGrams: row.weightGrams ? Number(row.weightGrams) : undefined,
-              lengthCm: row.lengthCm ? Number(row.lengthCm) : undefined,
-              widthCm: row.widthCm ? Number(row.widthCm) : undefined,
-              heightCm: row.heightCm ? Number(row.heightCm) : undefined,
               features,
               inStock: row.inStock ? row.inStock.toLowerCase() === "true" : true,
               updatedAt: new Date(),
@@ -418,9 +400,6 @@ export async function exportProductsCsv(): Promise<string> {
     gstRate: p.gstRate.toString(),
     hsnCode: p.hsnCode ?? "",
     weightGrams: p.weightGrams ?? "",
-    lengthCm: p.lengthCm ?? "",
-    widthCm: p.widthCm ?? "",
-    heightCm: p.heightCm ?? "",
     sizes: p.sizes.map((s) => s.size).join(";"),
     inStock: p.inStock,
     isActive: p.isActive,
