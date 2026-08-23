@@ -37,6 +37,14 @@ export function useSetPackTiers() {
   });
 }
 
+export function useSetBoxSizes() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, boxSizes }: { id: number; boxSizes: NonNullable<AdminProductInput["boxSizes"]> }) => api.setBoxSizes(id, boxSizes),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY }),
+  });
+}
+
 export function useAddProductImage() {
   const queryClient = useQueryClient();
   return useMutation({

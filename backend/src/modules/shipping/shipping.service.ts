@@ -1,10 +1,9 @@
-import { and, eq, isNotNull, isNull, lt, notInArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, notInArray, or } from "drizzle-orm";
 import { db } from "../../db";
-import { orders, orderStatusHistory, returnRequests, type ORDER_STATUS } from "../../db/schema";
+import { orders, orderStatusHistory, returnRequests, shippingBoxSizes, type ORDER_STATUS } from "../../db/schema";
 import { logger } from "../../lib/logger";
 import { loadOrderItems } from "../../lib/orderRelations";
 import * as delhivery from "../../providers/shipping/delhivery.provider";
-import { listBoxSizes } from "../admin-shipping/admin-shipping.service";
 
 type OrderStatus = (typeof ORDER_STATUS)[number];
 type OrderRow = typeof orders.$inferSelect;
@@ -22,26 +21,39 @@ function totalWeightGrams(items: { weightGrams: number | null; quantity: number 
   return items.reduce((sum, i) => sum + (i.weightGrams ?? DEFAULT_ITEM_WEIGHT_GRAMS) * i.quantity, 0);
 }
 
-// Looks up the admin-configured box size for a given box count — rounds UP
-// to the next configured size (never sends a box smaller than what's
-// actually being packed), capping at the largest configured size for
-// anything beyond it. Returns undefined if nothing's configured yet, so a
-// shipment can still go out without dimensions rather than fail outright.
-async function boxDimensionsFor(boxCount: number) {
-  const sizes = await listBoxSizes();
-  if (sizes.length === 0) return undefined;
-  const match = sizes.find((s) => s.boxCount >= boxCount) ?? sizes[sizes.length - 1];
-  return { lengthCm: match.lengthCm, widthCm: match.widthCm, heightCm: match.heightCm };
-}
+// Box size varies by product (a bulky product's "pack of 5" box isn't the
+// same as a compact one's), so each order line is looked up against its own
+// product's box-size table — boxCount for a line is packQty (boxes per
+// pack) × quantity (packs ordered), rounded UP to the smallest configured
+// size that's big enough (never under-sized), capping at that product's
+// largest configured size for anything beyond it. Lines with no box sizes
+// configured are skipped rather than failing the whole lookup.
+async function shipmentDimensionsCm(items: { productId: number | null; packQty: number; quantity: number }[]) {
+  const productIds = [...new Set(items.map((i) => i.productId).filter((id): id is number => id != null))];
+  if (productIds.length === 0) return undefined;
 
-// One shipment = one box, so every line's boxes go into the same box size
-// lookup — total box count is packQty (boxes per pack) × quantity (packs
-// ordered), summed across every line in the order. This is what grows as a
-// customer increases quantity in the cart, matching how the admin-managed
-// box-size table is keyed ("Pack of 10" means ten boxes going into one shipment).
-async function shipmentDimensionsCm(items: { packQty: number; quantity: number }[]) {
-  const totalBoxes = items.reduce((sum, i) => sum + i.packQty * i.quantity, 0);
-  return boxDimensionsFor(Math.max(totalBoxes, 1));
+  const allSizes = await db.select().from(shippingBoxSizes).where(inArray(shippingBoxSizes.productId, productIds));
+
+  const lineDimensions = items
+    .map((item) => {
+      if (item.productId == null) return undefined;
+      const sizes = allSizes.filter((s) => s.productId === item.productId).sort((a, b) => a.boxCount - b.boxCount);
+      if (sizes.length === 0) return undefined;
+      const boxCount = Math.max(item.packQty * item.quantity, 1);
+      const match = sizes.find((s) => s.boxCount >= boxCount) ?? sizes[sizes.length - 1];
+      return { lengthCm: match.lengthCm, widthCm: match.widthCm, heightCm: match.heightCm };
+    })
+    .filter((d): d is { lengthCm: number; widthCm: number; heightCm: number } => d != null);
+
+  if (lineDimensions.length === 0) return undefined;
+
+  // Multi-item orders: the single shipment box needs to be at least as big
+  // as the largest line's requirement along each axis.
+  return {
+    lengthCm: Math.max(...lineDimensions.map((d) => d.lengthCm)),
+    widthCm: Math.max(...lineDimensions.map((d) => d.widthCm)),
+    heightCm: Math.max(...lineDimensions.map((d) => d.heightCm)),
+  };
 }
 
 // Fires right after an order becomes CONFIRMED (COD placement or online

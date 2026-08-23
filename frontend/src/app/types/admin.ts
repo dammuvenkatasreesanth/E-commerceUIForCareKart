@@ -60,6 +60,14 @@ export interface AdminPackTier {
   tag: string | null;
 }
 
+export interface AdminBoxSize {
+  id: number;
+  boxCount: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+}
+
 export interface AdminProduct {
   id: number;
   slug: string;
@@ -86,6 +94,7 @@ export interface AdminProduct {
   images: AdminProductImage[];
   sizes: AdminProductSize[];
   packTiers: AdminPackTier[];
+  boxSizes: AdminBoxSize[];
   createdAt: string;
 }
 
@@ -107,6 +116,7 @@ export interface AdminProductInput {
   weightGrams?: number;
   sizes: string[];
   packTiers?: { tierIndex: number; label: string; packQty: number; discountPct: number; tag?: string }[];
+  boxSizes?: { boxCount: number; lengthCm: number; widthCm: number; heightCm: number }[];
   isActive?: boolean;
   inStock?: boolean;
 }

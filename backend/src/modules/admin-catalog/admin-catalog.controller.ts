@@ -34,6 +34,13 @@ export async function setPackTiers(req: Request, res: Response) {
   res.json(product);
 }
 
+export async function setBoxSizes(req: Request, res: Response) {
+  const id = parseIdParam(req.params.id);
+  const product = await service.setBoxSizes(id, req.body.boxSizes);
+  await writeAudit({ actorId: req.user!.id, action: "product.box_sizes.update", entityType: "Product", entityId: id, ipAddress: req.ip });
+  res.json(product);
+}
+
 export async function addImage(req: Request, res: Response) {
   const id = parseIdParam(req.params.id);
   if (!req.file) throw new BadRequestError("No image file uploaded");

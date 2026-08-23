@@ -7,6 +7,7 @@ import {
   createProductSchema,
   updateProductSchema,
   setPackTiersSchema,
+  setBoxSizesSchema,
   createCategorySchema,
   updateCategorySchema,
   adminListProductsQuerySchema,
@@ -24,6 +25,7 @@ adminCatalogRouter.get("/products/:id", asyncHandler(controller.getProduct));
 adminCatalogRouter.post("/products", validate({ body: createProductSchema }), asyncHandler(controller.createProduct));
 adminCatalogRouter.patch("/products/:id", validate({ body: updateProductSchema }), asyncHandler(controller.updateProduct));
 adminCatalogRouter.put("/products/:id/pack-tiers", validate({ body: setPackTiersSchema }), asyncHandler(controller.setPackTiers));
+adminCatalogRouter.put("/products/:id/box-sizes", validate({ body: setBoxSizesSchema }), asyncHandler(controller.setBoxSizes));
 adminCatalogRouter.post("/products/:id/images", uploadProductImage.single("image"), asyncHandler(controller.addImage));
 adminCatalogRouter.delete("/products/:id/images/:imageId", asyncHandler(controller.removeImage));
 adminCatalogRouter.post("/products/:id/video", uploadProductVideo.single("video"), asyncHandler(controller.uploadVideo));

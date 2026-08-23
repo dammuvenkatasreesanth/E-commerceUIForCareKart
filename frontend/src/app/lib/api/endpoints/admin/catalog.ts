@@ -29,6 +29,10 @@ export function setPackTiers(id: number, tiers: NonNullable<AdminProductInput["p
   return api.put(`/admin/products/${id}/pack-tiers`, { tiers });
 }
 
+export function setBoxSizes(id: number, boxSizes: NonNullable<AdminProductInput["boxSizes"]>): Promise<AdminProduct> {
+  return api.put(`/admin/products/${id}/box-sizes`, { boxSizes });
+}
+
 export function addProductImage(id: number, file: File): Promise<{ id: number; url: string; sortOrder: number }> {
   const form = new FormData();
   form.append("image", file);

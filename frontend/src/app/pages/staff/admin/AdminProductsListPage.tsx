@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Download, Upload, X, Video } from "lucide-react";
+import { Plus, Pencil, Download, Upload, X, Video, Trash2 } from "lucide-react";
 import { DataTable, type DataTableColumn } from "../../../components/common/DataTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
 import {
@@ -11,15 +11,17 @@ import {
   useAdminCategories,
   useImportProductsCsv,
   useSetPackTiers,
+  useSetBoxSizes,
   useAddProductImage,
   useRemoveProductImage,
   useUploadProductVideo,
 } from "../../../hooks/admin/useAdminCatalog";
 import { exportProductsCsv } from "../../../lib/api/endpoints/admin/catalog";
 import { downloadBlob } from "../../../lib/download";
-import type { AdminProduct, AdminProductInput, AdminPackTier } from "../../../types/admin";
+import type { AdminProduct, AdminProductInput, AdminPackTier, AdminBoxSize } from "../../../types/admin";
 
 type PackTierForm = { tierIndex: number; label: string; packQty: number; discountPct: number; tag: string };
+type BoxSizeForm = { boxCount: number; lengthCm: number; widthCm: number; heightCm: number };
 
 const defaultTiers = (): PackTierForm[] => [
   { tierIndex: 0, label: "Single Unit", packQty: 1, discountPct: 0, tag: "" },
@@ -32,6 +34,13 @@ const tiersFromProduct = (tiers: AdminPackTier[]): PackTierForm[] =>
   [...tiers]
     .sort((a, b) => a.tierIndex - b.tierIndex)
     .map((t) => ({ tierIndex: t.tierIndex, label: t.label, packQty: t.packQty, discountPct: Number(t.discountPct), tag: t.tag ?? "" }));
+
+const emptyBoxSizeRow = (): BoxSizeForm => ({ boxCount: 1, lengthCm: 0, widthCm: 0, heightCm: 0 });
+
+const boxSizesFromProduct = (boxSizes: AdminBoxSize[]): BoxSizeForm[] =>
+  [...boxSizes]
+    .sort((a, b) => a.boxCount - b.boxCount)
+    .map((b) => ({ boxCount: b.boxCount, lengthCm: b.lengthCm, widthCm: b.widthCm, heightCm: b.heightCm }));
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -66,6 +75,7 @@ export function AdminProductsListPage() {
   const updateProduct = useUpdateProduct();
   const importCsv = useImportProductsCsv();
   const setPackTiers = useSetPackTiers();
+  const setBoxSizes = useSetBoxSizes();
   const addProductImage = useAddProductImage();
   const removeProductImage = useRemoveProductImage();
   const uploadProductVideo = useUploadProductVideo();
@@ -77,6 +87,8 @@ export function AdminProductsListPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [tiers, setTiers] = useState<PackTierForm[]>(defaultTiers());
   const [isSavingTiers, setIsSavingTiers] = useState(false);
+  const [boxSizeRows, setBoxSizeRows] = useState<BoxSizeForm[]>([]);
+  const [isSavingBoxSizes, setIsSavingBoxSizes] = useState(false);
   // `editing` is a snapshot from when the dialog opened — refetch by id so the
   // images grid reflects adds/removes without needing to close and reopen.
   const { data: liveEditingProduct } = useAdminProduct(editing?.id);
@@ -87,6 +99,7 @@ export function AdminProductsListPage() {
     setForm(emptyForm());
     setSizesInput("");
     setTiers(defaultTiers());
+    setBoxSizeRows([]);
     setShowForm(true);
   };
 
@@ -112,6 +125,7 @@ export function AdminProductsListPage() {
     });
     setSizesInput(p.sizes.map((s) => s.size).join(", "));
     setTiers(p.packTiers.length > 0 ? tiersFromProduct(p.packTiers) : defaultTiers());
+    setBoxSizeRows(boxSizesFromProduct(p.boxSizes));
     setShowForm(true);
   };
 
@@ -122,7 +136,7 @@ export function AdminProductsListPage() {
       return;
     }
     setIsSaving(true);
-    const input: AdminProductInput = { ...form, sizes, packTiers: editing ? undefined : tiers };
+    const input: AdminProductInput = { ...form, sizes, packTiers: editing ? undefined : tiers, boxSizes: editing ? undefined : boxSizeRows };
     try {
       if (editing) {
         await updateProduct.mutateAsync({ id: editing.id, input });
@@ -170,6 +184,31 @@ export function AdminProductsListPage() {
   const updateTier = (index: number, patch: Partial<PackTierForm>) => {
     setTiers((prev) => prev.map((t, i) => (i === index ? { ...t, ...patch } : t)));
   };
+
+  const handleSaveBoxSizes = async () => {
+    if (!editing) return;
+    if (boxSizeRows.some((b) => b.boxCount <= 0 || b.lengthCm <= 0 || b.widthCm <= 0 || b.heightCm <= 0)) {
+      toast.error("Every box size row needs a box count and all three dimensions");
+      return;
+    }
+    setIsSavingBoxSizes(true);
+    try {
+      await setBoxSizes.mutateAsync({ id: editing.id, boxSizes: boxSizeRows });
+      toast.success("Box sizes updated");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setIsSavingBoxSizes(false);
+    }
+  };
+
+  const updateBoxSizeRow = (index: number, patch: Partial<BoxSizeForm>) => {
+    setBoxSizeRows((prev) => prev.map((b, i) => (i === index ? { ...b, ...patch } : b)));
+  };
+
+  const addBoxSizeRow = () => setBoxSizeRows((prev) => [...prev, emptyBoxSizeRow()]);
+
+  const removeBoxSizeRow = (index: number) => setBoxSizeRows((prev) => prev.filter((_, i) => i !== index));
 
   const handleAddImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -412,6 +451,41 @@ export function AdminProductsListPage() {
                 </button>
               ) : (
                 <p className="text-[11px] text-muted-foreground mt-1.5">Pricing above will be applied when you save the product.</p>
+              )}
+            </div>
+
+            {/* Box sizes */}
+            <div className="border-t border-border pt-3">
+              <label className="block text-xs font-semibold mb-2">Shipping Box Sizes</label>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                The physical box this product ships in, by total box count (pack size × quantity). Different products can need different box sizes for the
+                same count — e.g. a bulky item's "5 boxes" isn't the same size as a compact one's.
+              </p>
+              <div className="space-y-2">
+                {boxSizeRows.map((b, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-1.5 items-center">
+                    <input type="number" value={b.boxCount || ""} onChange={(e) => updateBoxSizeRow(i, { boxCount: Number(e.target.value) })} placeholder="Boxes" className="col-span-2 px-2 py-1.5 bg-muted rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-xs" />
+                    <input type="number" value={b.lengthCm || ""} onChange={(e) => updateBoxSizeRow(i, { lengthCm: Number(e.target.value) })} placeholder="Length (cm)" className="col-span-3 px-2 py-1.5 bg-muted rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-xs" />
+                    <input type="number" value={b.widthCm || ""} onChange={(e) => updateBoxSizeRow(i, { widthCm: Number(e.target.value) })} placeholder="Width (cm)" className="col-span-3 px-2 py-1.5 bg-muted rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-xs" />
+                    <input type="number" value={b.heightCm || ""} onChange={(e) => updateBoxSizeRow(i, { heightCm: Number(e.target.value) })} placeholder="Height (cm)" className="col-span-3 px-2 py-1.5 bg-muted rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-xs" />
+                    <button onClick={() => removeBoxSizeRow(i)} type="button" className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button onClick={addBoxSizeRow} type="button" className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold">
+                  <Plus className="w-3.5 h-3.5" />Add Box Size
+                </button>
+                {editing && (
+                  <button onClick={handleSaveBoxSizes} disabled={isSavingBoxSizes} className="px-3 py-1.5 border border-border rounded-lg text-xs font-semibold disabled:opacity-50">
+                    {isSavingBoxSizes ? "Saving…" : "Save Box Sizes"}
+                  </button>
+                )}
+              </div>
+              {!editing && boxSizeRows.length > 0 && (
+                <p className="text-[11px] text-muted-foreground mt-1.5">Box sizes above will be applied when you save the product.</p>
               )}
             </div>
 

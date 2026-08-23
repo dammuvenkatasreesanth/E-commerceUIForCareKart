@@ -374,18 +374,20 @@ export const storeSettings = mysqlTable("StoreSetting", {
   updatedAt: updatedAt(),
 });
 
-// Global packing standard (not per-product) — the warehouse packs strictly
-// to this table by total box count, regardless of which product is shipping.
-// Used to pick the courier shipment's declared dimensions.
+// Per-product packing standard — box size varies by product (a bulky
+// product's "pack of 5" box isn't the same as a compact one's), so this is
+// keyed by (productId, boxCount), not global. Used to pick the courier
+// shipment's declared dimensions based on that product's actual quantity.
 export const shippingBoxSizes = mysqlTable("ShippingBoxSize", {
   id: int("id").autoincrement().primaryKey(),
-  boxCount: int("boxCount").notNull().unique(),
+  productId: int("productId").notNull(),
+  boxCount: int("boxCount").notNull(),
   lengthCm: int("lengthCm").notNull(),
   widthCm: int("widthCm").notNull(),
   heightCm: int("heightCm").notNull(),
   updatedAt: updatedAt(),
   createdAt: createdAt(),
-});
+}, (t) => [uniqueIndex("ShippingBoxSize_productId_boxCount_key").on(t.productId, t.boxCount)]);
 
 export const emailCampaigns = mysqlTable("EmailCampaign", {
   id: int("id").autoincrement().primaryKey(),

@@ -36,7 +36,6 @@ import { AdminDashboardPage } from "../pages/staff/admin/AdminDashboardPage";
 import { AdminProductsListPage } from "../pages/staff/admin/AdminProductsListPage";
 import { AdminCategoriesPage } from "../pages/staff/admin/AdminCategoriesPage";
 import { AdminOrdersListPage } from "../pages/staff/admin/AdminOrdersListPage";
-import { AdminBoxSizesPage } from "../pages/staff/admin/AdminBoxSizesPage";
 import { AdminOrderDetailPage } from "../pages/staff/admin/AdminOrderDetailPage";
 import { AdminCustomersListPage } from "../pages/staff/admin/AdminCustomersListPage";
 import { AdminCustomerDetailPage } from "../pages/staff/admin/AdminCustomerDetailPage";
@@ -117,7 +116,6 @@ export const router = createBrowserRouter([
           { path: "categories", element: <AdminCategoriesPage /> },
           { path: "orders", element: <AdminOrdersListPage /> },
           { path: "orders/:id", element: <AdminOrderDetailPage /> },
-          { path: "box-sizes", element: <AdminBoxSizesPage /> },
           { path: "customers", element: <AdminCustomersListPage /> },
           { path: "customers/:id", element: <AdminCustomerDetailPage /> },
           { path: "marketing", element: <AdminMarketingPage /> },

@@ -8,6 +8,13 @@ const packTierSchema = z.object({
   tag: z.string().optional(),
 });
 
+const boxSizeSchema = z.object({
+  boxCount: z.number().int().positive(),
+  lengthCm: z.number().int().positive(),
+  widthCm: z.number().int().positive(),
+  heightCm: z.number().int().positive(),
+});
+
 export const createProductSchema = z.object({
   name: z.string().min(1).max(200),
   tagline: z.string().max(200).optional(),
@@ -35,6 +42,10 @@ export const updateProductSchema = createProductSchema.partial().extend({
 
 export const setPackTiersSchema = z.object({
   tiers: z.array(packTierSchema).min(1).max(4),
+});
+
+export const setBoxSizesSchema = z.object({
+  boxSizes: z.array(boxSizeSchema),
 });
 
 export const createCategorySchema = z.object({

@@ -2,7 +2,7 @@ import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import { and, asc, count, eq, inArray, like, type SQL } from "drizzle-orm";
 import { db } from "../../db";
-import { categories, packPriceTiers, productImages, productSizes, products } from "../../db/schema";
+import { categories, packPriceTiers, productImages, productSizes, products, shippingBoxSizes } from "../../db/schema";
 import { slugify } from "../../lib/slugify";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
 import { attachProductRelations } from "../../lib/productRelations";
@@ -97,6 +97,7 @@ interface ProductInput {
   weightGrams?: number;
   sizes: string[];
   packTiers?: PackTierInput[];
+  boxSizes?: BoxSizeInput[];
 }
 
 export async function createProduct(input: ProductInput) {
@@ -132,6 +133,9 @@ export async function createProduct(input: ProductInput) {
 
     await tx.insert(productSizes).values(input.sizes.map((size, i) => ({ productId: id, size, sortOrder: i })));
     await tx.insert(packPriceTiers).values(tiers.map((t) => ({ productId: id, tierIndex: t.tierIndex, label: t.label, packQty: t.packQty, discountPct: String(t.discountPct), tag: t.tag ?? null })));
+    if (input.boxSizes && input.boxSizes.length > 0) {
+      await tx.insert(shippingBoxSizes).values(input.boxSizes.map((b) => ({ productId: id, ...b, updatedAt: new Date() })));
+    }
 
     return id;
   });
@@ -206,6 +210,30 @@ export async function setPackTiers(id: number, tiers: PackTierInput[]) {
         .insert(packPriceTiers)
         .values({ productId: id, tierIndex: t.tierIndex, label: t.label, packQty: t.packQty, discountPct: String(t.discountPct), tag: t.tag ?? null })
         .onDuplicateKeyUpdate({ set: { label: t.label, packQty: t.packQty, discountPct: String(t.discountPct), tag: t.tag ?? null } });
+    }
+  });
+
+  return getProduct(id);
+}
+
+interface BoxSizeInput {
+  boxCount: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+}
+
+// Full replace (delete-then-insert), not upsert — unlike pack tiers' fixed
+// 4 slots, admins freely add/remove box-count rows here, so an upsert-only
+// approach would leave stale rows behind for counts they removed.
+export async function setBoxSizes(id: number, boxSizes: BoxSizeInput[]) {
+  const product = await db.query.products.findFirst({ where: eq(products.id, id) });
+  if (!product) throw new NotFoundError("Product not found");
+
+  await db.transaction(async (tx) => {
+    await tx.delete(shippingBoxSizes).where(eq(shippingBoxSizes.productId, id));
+    if (boxSizes.length > 0) {
+      await tx.insert(shippingBoxSizes).values(boxSizes.map((b) => ({ productId: id, ...b, updatedAt: new Date() })));
     }
   });
 
