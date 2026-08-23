@@ -1,11 +1,23 @@
+import path from "node:path";
 import PDFDocument from "pdfkit";
 import type { orders, orderItems } from "../../db/schema";
 
 type InvoiceOrder = typeof orders.$inferSelect & { items: (typeof orderItems.$inferSelect)[] };
 
+// PDFKit's built-in Helvetica/Courier/Times fonts are the old PDF "Standard
+// 14" set, which predates the ₹ (U+20B9) glyph entirely — rendering it with
+// those fonts silently substitutes the wrong character instead of erroring.
+// Noto Sans has full Unicode coverage including ₹, so currency text renders
+// with this font specifically (everything else keeps the original Helvetica
+// look). PDFKit subsets on embed, so this ~2MB source file adds only a few
+// KB to the actual generated PDF.
+const RUPEE_FONT_PATH = path.join(__dirname, "fonts", "NotoSans.ttf");
+const RUPEE_FONT = "NotoSans";
+
 export function generateInvoicePdf(order: InvoiceOrder): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
+    doc.registerFont(RUPEE_FONT, RUPEE_FONT_PATH);
     const chunks: Buffer[] = [];
 
     doc.on("data", (chunk) => chunks.push(chunk));
@@ -41,22 +53,24 @@ export function generateInvoicePdf(order: InvoiceOrder): Promise<Buffer> {
     doc.font("Helvetica");
     let y = tableTop + 22;
     for (const item of order.items) {
-      doc.fontSize(9);
+      doc.fontSize(9).font("Helvetica");
       doc.text(`${item.productName} (${item.sizeLabel})`, columns.name, y, { width: 240 });
       doc.text(String(item.quantity * item.packQty), columns.qty, y);
-      doc.text(`₹${Number(item.unitPrice).toFixed(2)}`, columns.price, y);
-      doc.text(`${Number(item.gstRate).toFixed(1)}%`, columns.gst, y);
-      doc.text(`₹${Number(item.lineTotal).toFixed(2)}`, columns.total, y);
+      doc.font(RUPEE_FONT).text(`₹${Number(item.unitPrice).toFixed(2)}`, columns.price, y);
+      doc.font("Helvetica").text(`${Number(item.gstRate).toFixed(1)}%`, columns.gst, y);
+      doc.font(RUPEE_FONT).text(`₹${Number(item.lineTotal).toFixed(2)}`, columns.total, y);
       y += 20;
     }
 
     doc.moveTo(50, y + 5).lineTo(545, y + 5).stroke();
     y += 15;
 
+    // `value` strings here always start with "₹"/"-₹" or are the literal
+    // "FREE" — Noto Sans covers plain ASCII too, so it's safe to use for both.
     const summaryLine = (label: string, value: string, bold = false) => {
       doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(10);
       doc.text(label, 380, y, { width: 100 });
-      doc.text(value, columns.total, y);
+      doc.font(RUPEE_FONT).text(value, columns.total, y);
       y += 16;
     };
 

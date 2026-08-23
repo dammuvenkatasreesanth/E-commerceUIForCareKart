@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node -e \"require('fs').cpSync('src/providers/pdf/fonts','dist/src/providers/pdf/fonts',{recursive:true})\"",
     "postinstall": "npm run build",
     "start": "node dist/src/server.js",
     "db:seed": "tsx prisma/seed.ts"
