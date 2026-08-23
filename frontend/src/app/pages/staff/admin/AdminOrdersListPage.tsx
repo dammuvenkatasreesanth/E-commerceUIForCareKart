@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, Truck } from "lucide-react";
 import { DataTable, type DataTableColumn } from "../../../components/common/DataTable";
 import { StatusBadge } from "../../../components/common/StatusBadge";
-import { useAdminOrders } from "../../../hooks/admin/useAdminOrders";
+import { useAdminOrders, useSchedulePickup } from "../../../hooks/admin/useAdminOrders";
 import { exportOrdersCsv, type AdminOrderListQuery } from "../../../lib/api/endpoints/admin/orders";
 import { downloadBlob } from "../../../lib/download";
 import type { AdminOrder } from "../../../types/admin";
@@ -49,6 +49,7 @@ export function AdminOrdersListPage() {
   };
 
   const { data, isLoading } = useAdminOrders(query);
+  const schedulePickup = useSchedulePickup();
 
   const handleExport = async () => {
     try {
@@ -57,6 +58,13 @@ export function AdminOrdersListPage() {
     } catch (err) {
       toast.error(errorMessage(err));
     }
+  };
+
+  const handleSchedulePickup = () => {
+    schedulePickup.mutate(undefined, {
+      onSuccess: (result) => toast.success(result.pickupId ? `Pickup scheduled (ID: ${result.pickupId})` : "Pickup request sent to Delhivery"),
+      onError: (err: Error) => toast.error(errorMessage(err)),
+    });
   };
 
   const goToOrder = (o: AdminOrder) => navigate(`/staff/admin/orders/${o.id}`);
@@ -87,9 +95,18 @@ export function AdminOrdersListPage() {
     <div>
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-extrabold font-['Plus_Jakarta_Sans']">Orders</h1>
-        <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl">
-          <Download className="w-3.5 h-3.5" />Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSchedulePickup}
+            disabled={schedulePickup.isPending}
+            className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl disabled:opacity-50"
+          >
+            <Truck className="w-3.5 h-3.5" />{schedulePickup.isPending ? "Scheduling…" : "Schedule Delhivery Pickup"}
+          </button>
+          <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl">
+            <Download className="w-3.5 h-3.5" />Export CSV
+          </button>
+        </div>
       </div>
 
       <DataTable

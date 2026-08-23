@@ -12,6 +12,27 @@ function buildItems(items: { hsnCode: string | null; productName: string }[]) {
   return items.map((i) => ({ hsnCode: i.hsnCode, description: i.productName }));
 }
 
+// Falls back to a conservative estimate for items with no weight set on the
+// product yet, so shipments never go out as a literal 0g (Delhivery may
+// mis-handle/mis-price an unweighted parcel).
+const DEFAULT_ITEM_WEIGHT_GRAMS = 250;
+
+function totalWeightGrams(items: { weightGrams: number | null; quantity: number }[]): number {
+  return items.reduce((sum, i) => sum + (i.weightGrams ?? DEFAULT_ITEM_WEIGHT_GRAMS) * i.quantity, 0);
+}
+
+// Dimensions are per-shipment (one box), not summable like weight — take the
+// largest item along each axis as a stand-in for the packed box size. Not
+// exact for multi-item orders, but far better than sending nothing.
+function shipmentDimensionsCm(items: { lengthCm: number | null; widthCm: number | null; heightCm: number | null }[]) {
+  const max = (values: (number | null)[]) => values.reduce<number | undefined>((m, v) => (v != null && (m == null || v > m) ? v : m), undefined);
+  return {
+    lengthCm: max(items.map((i) => i.lengthCm)),
+    widthCm: max(items.map((i) => i.widthCm)),
+    heightCm: max(items.map((i) => i.heightCm)),
+  };
+}
+
 // Fires right after an order becomes CONFIRMED (COD placement or online
 // payment success) — never blocks order placement; a Delhivery failure is
 // logged, not surfaced to the customer, same as the order-confirmation email.
@@ -35,9 +56,14 @@ export async function createShipmentForOrder(orderId: number): Promise<void> {
     paymentMode: order.paymentMethod === "COD" ? "COD" : "Prepaid",
     codAmount: order.paymentMethod === "COD" ? Number(order.totalAmount) : undefined,
     items: buildItems(items),
+    weightGrams: totalWeightGrams(items),
+    ...shipmentDimensionsCm(items),
   });
 
   await db.update(orders).set({ trackingId: waybill, carrier: "DELHIVERY", updatedAt: new Date() }).where(eq(orders.id, orderId));
+  // Pickup is a manual, admin-triggered step (see schedulePickup below) — the
+  // order just needs to show up as a pending AWB on Delhivery's side for the
+  // team to process from there, not get swept into an automatic pickup.
 }
 
 export async function createReturnShipmentForOrder(orderId: number, returnRequestId: number): Promise<void> {
@@ -58,6 +84,8 @@ export async function createReturnShipmentForOrder(orderId: number, returnReques
     state: order.shipState,
     pincode: order.shipPincode,
     items: buildItems(items),
+    weightGrams: totalWeightGrams(items),
+    ...shipmentDimensionsCm(items),
   });
 
   await db.update(returnRequests).set({ returnWaybill: waybill, updatedAt: new Date() }).where(eq(returnRequests.id, returnRequestId));
@@ -77,9 +105,17 @@ export async function cancelShipmentForOrder(waybill: string): Promise<void> {
 // Coarse mapping from Delhivery's free-text status to our own ORDER_STATUS
 // ladder — verify these literal strings against a real account before this
 // goes live for real customer orders (see shipping.provider's tracking notes).
-function mapDelhiveryStatus(raw: string | null): OrderStatus | null {
-  if (!raw) return null;
-  const s = raw.toLowerCase();
+// Cancellation in particular doesn't show up in `status` itself (confirmed
+// against a real cancelled shipment: status stayed "Not Picked") — Delhivery
+// puts the actual reason in `instructions` instead (e.g. "Seller cancelled
+// the order"), so that has to be checked too, and takes priority.
+function mapDelhiveryStatus(status: string | null, instructions: string | null): OrderStatus | null {
+  const instructionsLower = instructions?.toLowerCase() ?? "";
+  if (instructionsLower.includes("cancel")) return "CANCELLED";
+
+  if (!status) return null;
+  const s = status.toLowerCase();
+  if (s.includes("cancel")) return "CANCELLED";
   if (s.includes("delivered")) return "DELIVERED";
   if (s.includes("out for delivery")) return "OUT_FOR_DELIVERY";
   if (s.includes("dispatch") || s.includes("in transit") || s.includes("manifest")) return "SHIPPED";
@@ -110,8 +146,9 @@ export async function sweepActiveShipments(): Promise<void> {
 async function trackAndApply(order: OrderRow): Promise<void> {
   if (!order.trackingId) return;
   try {
-    const { status, raw } = await delhivery.trackShipment(order.trackingId);
-    const mapped = mapDelhiveryStatus(status);
+    const { status, instructions, raw } = await delhivery.trackShipment(order.trackingId);
+    const mapped = mapDelhiveryStatus(status, instructions);
+    const statusChanged = mapped && mapped !== order.status;
 
     await db
       .update(orders)
@@ -119,18 +156,39 @@ async function trackAndApply(order: OrderRow): Promise<void> {
         shippingStatus: status,
         shippingRawResponse: raw as object,
         shippingLastCheckedAt: new Date(),
-        status: mapped && mapped !== order.status ? mapped : order.status,
+        status: statusChanged ? mapped : order.status,
+        cancelledAt: statusChanged && mapped === "CANCELLED" ? new Date() : order.cancelledAt,
+        cancelReason: statusChanged && mapped === "CANCELLED" ? (instructions ?? "Cancelled by Delhivery") : order.cancelReason,
         updatedAt: new Date(),
       })
       .where(eq(orders.id, order.id));
 
-    if (mapped && mapped !== order.status) {
-      await db.insert(orderStatusHistory).values({ orderId: order.id, fromStatus: order.status, toStatus: mapped, note: `Delhivery: ${status}` });
+    if (statusChanged) {
+      await db.insert(orderStatusHistory).values({ orderId: order.id, fromStatus: order.status, toStatus: mapped, note: `Delhivery: ${instructions ?? status}` });
     }
   } catch (err) {
     logger.error({ err, orderId: order.id, waybill: order.trackingId }, "Failed to track Delhivery shipment");
     await db.update(orders).set({ shippingLastCheckedAt: new Date(), updatedAt: new Date() }).where(eq(orders.id, order.id));
   }
+}
+
+// Admin-triggered — schedules today's courier pickup for every shipment
+// that's been manifested but not yet reported as picked up. expectedCount
+// defaults to counting today's not-yet-shipped Delhivery orders.
+export async function schedulePickup(input?: { pickupDate?: string; pickupTime?: string; expectedPackageCount?: number }) {
+  const pickupDate = input?.pickupDate ?? new Date().toISOString().slice(0, 10);
+  const pickupTime = input?.pickupTime ?? "14:00:00";
+
+  let expectedPackageCount = input?.expectedPackageCount;
+  if (expectedPackageCount == null) {
+    const pending = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.carrier, "DELHIVERY"), notInArray(orders.status, ["SHIPPED", "OUT_FOR_DELIVERY", ...TERMINAL_STATUSES])));
+    expectedPackageCount = pending.length;
+  }
+
+  return delhivery.createPickupRequest({ pickupDate, pickupTime, expectedPackageCount });
 }
 
 // Bypasses the sweep's staleness cutoff — used by the admin "Refresh tracking" button.

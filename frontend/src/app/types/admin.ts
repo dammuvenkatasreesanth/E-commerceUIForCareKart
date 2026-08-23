@@ -62,6 +62,10 @@ export interface AdminProduct {
   moq: number;
   gstRate: string;
   hsnCode: string | null;
+  weightGrams: number | null;
+  lengthCm: number | null;
+  widthCm: number | null;
+  heightCm: number | null;
   isActive: boolean;
   inStock: boolean;
   ratingAvg: string;
@@ -87,6 +91,10 @@ export interface AdminProductInput {
   moq?: number;
   gstRate?: number;
   hsnCode?: string;
+  weightGrams?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
   sizes: string[];
   packTiers?: { tierIndex: number; label: string; packQty: number; discountPct: number; tag?: string }[];
   isActive?: boolean;

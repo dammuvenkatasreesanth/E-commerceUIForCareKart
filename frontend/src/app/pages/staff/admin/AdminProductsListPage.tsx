@@ -50,6 +50,10 @@ const emptyForm = (): AdminProductInput => ({
   moq: 1,
   gstRate: 18,
   hsnCode: "",
+  weightGrams: undefined,
+  lengthCm: undefined,
+  widthCm: undefined,
+  heightCm: undefined,
   sizes: [],
   isActive: true,
   inStock: true,
@@ -104,6 +108,10 @@ export function AdminProductsListPage() {
       moq: p.moq,
       gstRate: Number(p.gstRate),
       hsnCode: p.hsnCode ?? "",
+      weightGrams: p.weightGrams ?? undefined,
+      lengthCm: p.lengthCm ?? undefined,
+      widthCm: p.widthCm ?? undefined,
+      heightCm: p.heightCm ?? undefined,
       sizes: p.sizes.map((s) => s.size),
       isActive: p.isActive,
       inStock: p.inStock,
@@ -344,6 +352,42 @@ export function AdminProductsListPage() {
               <div>
                 <label className="block text-xs font-semibold mb-1">HSN Code</label>
                 <input value={form.hsnCode} onChange={(e) => setForm((f) => ({ ...f, hsnCode: e.target.value }))} className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">Weight per unit (grams)</label>
+                <input
+                  type="number"
+                  value={form.weightGrams ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, weightGrams: e.target.value ? Number(e.target.value) : undefined }))}
+                  placeholder="Used for courier shipment weight"
+                  className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold mb-1">Package dimensions (cm) — L × W × H</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    type="number"
+                    value={form.lengthCm ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, lengthCm: e.target.value ? Number(e.target.value) : undefined }))}
+                    placeholder="Length"
+                    className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+                  />
+                  <input
+                    type="number"
+                    value={form.widthCm ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, widthCm: e.target.value ? Number(e.target.value) : undefined }))}
+                    placeholder="Width"
+                    className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+                  />
+                  <input
+                    type="number"
+                    value={form.heightCm ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, heightCm: e.target.value ? Number(e.target.value) : undefined }))}
+                    placeholder="Height"
+                    className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+                  />
+                </div>
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-semibold mb-1">Sizes (comma-separated)</label>

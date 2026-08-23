@@ -135,6 +135,10 @@ export const products = mysqlTable("Product", {
   moq: int("moq").notNull().default(1),
   gstRate: decimal("gstRate", { precision: 4, scale: 2 }).notNull().default("18.00"),
   hsnCode: varchar("hsnCode", { length: 191 }),
+  weightGrams: int("weightGrams"),
+  lengthCm: int("lengthCm"),
+  widthCm: int("widthCm"),
+  heightCm: int("heightCm"),
   isActive: boolean("isActive").notNull().default(true),
   inStock: boolean("inStock").notNull().default(true),
   ratingAvg: decimal("ratingAvg", { precision: 3, scale: 2 }).notNull().default("0.00"),
@@ -273,6 +277,10 @@ export const orderItems = mysqlTable("OrderItem", {
   lineTotal: decimal("lineTotal", { precision: 12, scale: 2 }).notNull(),
   gstRate: decimal("gstRate", { precision: 4, scale: 2 }).notNull(),
   hsnCode: varchar("hsnCode", { length: 191 }),
+  weightGrams: int("weightGrams"),
+  lengthCm: int("lengthCm"),
+  widthCm: int("widthCm"),
+  heightCm: int("heightCm"),
 }, (t) => [index("OrderItem_orderId_idx").on(t.orderId)]);
 
 export const orderStatusHistory = mysqlTable("OrderStatusHistory", {

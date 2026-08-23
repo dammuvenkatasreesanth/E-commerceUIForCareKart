@@ -35,6 +35,10 @@ export function refreshShipmentTracking(id: number): Promise<AdminOrder> {
   return api.post(`/admin/orders/${id}/refresh-tracking`);
 }
 
+export function schedulePickup(): Promise<{ pickupId: string | null }> {
+  return api.post(`/admin/orders/schedule-pickup`);
+}
+
 export function exportOrdersCsv(query: AdminOrderListQuery = {}): Promise<Blob> {
   return apiFetchBlob(`/admin/orders/export${buildQuery(query as Record<string, string | number | boolean | undefined | null>)}`);
 }

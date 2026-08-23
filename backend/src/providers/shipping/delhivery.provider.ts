@@ -39,6 +39,13 @@ export interface CreateShipmentInput {
   paymentMode: "COD" | "Prepaid" | "Pickup";
   codAmount?: number;
   items: ShipmentItem[];
+  /** Total shipment weight in grams — sent as-is; Delhivery shows "0 gm" and
+   * may mis-price/mis-handle the shipment if this is omitted. */
+  weightGrams?: number;
+  /** Overall package dimensions in cm — one box per shipment. */
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
 }
 
 export interface CreateShipmentResult {
@@ -72,6 +79,10 @@ export async function createShipment(input: CreateShipmentInput): Promise<Create
         hsn_code: input.items[0]?.hsnCode ?? undefined,
         seller_gst_tin: env.DELHIVERY_SELLER_GST_TIN || undefined,
         quantity: input.items.length,
+        weight: input.weightGrams,
+        shipment_length: input.lengthCm,
+        shipment_width: input.widthCm,
+        shipment_height: input.heightCm,
       },
     ],
     pickup_location: { name: env.DELHIVERY_PICKUP_LOCATION },
@@ -110,13 +121,61 @@ export async function cancelShipment(waybill: string): Promise<void> {
   await axios.post(`${baseUrl()}/api/p/edit`, { waybill, cancellation: "true" }, { headers: authHeaders() });
 }
 
+export interface CreatePickupRequestInput {
+  pickupDate: string; // "YYYY-MM-DD"
+  pickupTime: string; // "HH:MM:SS"
+  expectedPackageCount: number;
+}
+
+export interface CreatePickupRequestResult {
+  pickupId: string | null;
+  raw: unknown;
+}
+
+interface DelhiveryPickupResponse {
+  pickup_id?: string | number;
+  pickup_request_id?: string | number;
+  success?: boolean;
+}
+
+// Schedules a courier pickup covering all shipments manifested at the
+// configured pickup_location — this is an admin-triggered daily action (not
+// fired per-order), since a pickup only makes sense once per working window.
+// Field names are best-effort from Delhivery's docs (no full example payload
+// shown) — verify against a real account before relying on this in production.
+export async function createPickupRequest(input: CreatePickupRequestInput): Promise<CreatePickupRequestResult> {
+  assertConfigured();
+
+  try {
+    const response = await axios.post<DelhiveryPickupResponse>(
+      `${baseUrl()}/fm/request/new/`,
+      {
+        pickup_location: env.DELHIVERY_PICKUP_LOCATION,
+        pickup_date: input.pickupDate,
+        pickup_time: input.pickupTime,
+        expected_package_count: input.expectedPackageCount,
+      },
+      { headers: authHeaders() },
+    );
+    const pickupId = response.data?.pickup_id ?? response.data?.pickup_request_id ?? null;
+    return { pickupId: pickupId != null ? String(pickupId) : null, raw: response.data };
+  } catch (err) {
+    logger.error({ err, input }, "Delhivery create pickup request failed");
+    throw new AppError("Failed to schedule Delhivery pickup.", 502);
+  }
+}
+
 export interface TrackShipmentResult {
   status: string | null;
+  /** Free-text reason accompanying the status — e.g. "Seller cancelled the
+   * order" often shows up here while `status` itself stays a generic value
+   * like "Not Picked", so cancellation detection has to check this too. */
+  instructions: string | null;
   raw: unknown;
 }
 
 interface DelhiveryTrackResponse {
-  ShipmentData?: { Shipment?: { Status?: { Status?: string } } }[];
+  ShipmentData?: { Shipment?: { Status?: { Status?: string; Instructions?: string } } }[];
 }
 
 export async function trackShipment(waybill: string): Promise<TrackShipmentResult> {
@@ -127,8 +186,8 @@ export async function trackShipment(waybill: string): Promise<TrackShipmentResul
       headers: authHeaders(),
       params: { waybill },
     });
-    const status = response.data?.ShipmentData?.[0]?.Shipment?.Status?.Status ?? null;
-    return { status, raw: response.data };
+    const shipmentStatus = response.data?.ShipmentData?.[0]?.Shipment?.Status;
+    return { status: shipmentStatus?.Status ?? null, instructions: shipmentStatus?.Instructions ?? null, raw: response.data };
   } catch (err) {
     logger.error({ err, waybill }, "Delhivery track shipment failed");
     throw new AppError("Failed to fetch tracking status.", 502);

@@ -99,6 +99,10 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
       lineTotal,
       gstRate,
       hsnCode: item.product.hsnCode,
+      weightGrams: item.product.weightGrams,
+      lengthCm: item.product.lengthCm,
+      widthCm: item.product.widthCm,
+      heightCm: item.product.heightCm,
       gstAmount: extractGst(lineTotal, gstRate),
     };
   });
@@ -162,6 +166,10 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
         lineTotal: String(i.lineTotal),
         gstRate: String(i.gstRate),
         hsnCode: i.hsnCode,
+        weightGrams: i.weightGrams,
+        lengthCm: i.lengthCm,
+        widthCm: i.widthCm,
+        heightCm: i.heightCm,
       })),
     );
 

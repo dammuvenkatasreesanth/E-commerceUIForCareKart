@@ -26,6 +26,11 @@ export async function refreshTracking(req: Request, res: Response) {
   res.json(order);
 }
 
+export async function schedulePickup(req: Request, res: Response) {
+  const result = await service.schedulePickup(req.body);
+  res.json(result);
+}
+
 export async function refund(req: Request, res: Response) {
   const id = parseIdParam(req.params.id);
   const refundRecord = await service.initiateRefund(req.user!.id, id, req.body);

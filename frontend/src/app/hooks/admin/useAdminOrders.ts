@@ -34,3 +34,7 @@ export function useRefreshShipmentTracking() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
   });
 }
+
+export function useSchedulePickup() {
+  return useMutation({ mutationFn: () => api.schedulePickup() });
+}
