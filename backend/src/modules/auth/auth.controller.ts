@@ -93,6 +93,40 @@ export async function googleLoginHandler(req: Request, res: Response) {
   });
 }
 
+// Google's redirect-mode ("ux_mode=redirect") button does a plain top-level
+// form POST here instead of an XHR — popup mode is unreliable on mobile web
+// and gets silently blocked by some desktop browsers' tracking prevention,
+// so this is the primary Google sign-in path, not a fallback. Because this
+// is a real page navigation (not JS the frontend can read a response body
+// from), success/failure both end in an HTTP redirect back into the SPA
+// rather than a JSON body — GoogleAuthCompletePage picks up the session from
+// there via the httpOnly cookie this handler sets before redirecting.
+export async function googleRedirectCallbackHandler(req: Request, res: Response) {
+  const frontendBase = env.STAFF_APP_URL;
+  const credential = req.body?.credential as string | undefined;
+
+  // Google mirrors its own g_csrf_token cookie back as a body field on this
+  // POST — verifying they match is the standard CSRF check for this flow.
+  // The cookie is scoped to whichever origin loaded the GSI script (the SPA's
+  // domain), which may differ from this API's own domain, so an absent
+  // cookie isn't itself proof of forgery here; the credential's own signature
+  // (verified below via verifyIdToken) is what actually establishes trust.
+  const cookieCsrf = req.cookies?.g_csrf_token as string | undefined;
+  const bodyCsrf = req.body?.g_csrf_token as string | undefined;
+  if (!credential || !bodyCsrf || (cookieCsrf && cookieCsrf !== bodyCsrf)) {
+    res.redirect(302, `${frontendBase}/login?error=google_failed`);
+    return;
+  }
+
+  try {
+    const result = await authService.googleLogin(credential, sessionMeta(req));
+    setRefreshCookie(res, result.refreshToken);
+    res.redirect(302, `${frontendBase}/auth/google/complete?newUser=${result.isNewUser ? "1" : "0"}`);
+  } catch {
+    res.redirect(302, `${frontendBase}/login?error=google_failed`);
+  }
+}
+
 export async function facebookLoginHandler(req: Request, res: Response) {
   const result = await authService.facebookLogin(req.body.accessToken, req.body.userId, sessionMeta(req));
   setRefreshCookie(res, result.refreshToken);

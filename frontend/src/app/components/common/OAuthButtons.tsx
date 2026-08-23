@@ -1,11 +1,14 @@
 import { GoogleLogin } from "@react-oauth/google";
 import { toast } from "sonner";
-import { googleLogin as googleLoginApi } from "../../lib/api/endpoints/auth";
-import { useAuthenticateAndMergeCart } from "../../hooks/useAuthenticateAndMergeCart";
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Something went wrong. Please try again.";
-}
+// Popup-based sign-in (GIS's default) is unreliable in practice: desktop
+// browsers with strict tracking-prevention (Edge, some ad-blockers) silently
+// block the popup, and mobile web browsers frequently hang or block it
+// outright. Redirect mode does a plain top-level navigation instead — no
+// popup involved — so it works everywhere; the tradeoff is the credential
+// arrives via a full-page POST to the backend (see auth.controller.ts's
+// googleRedirectCallbackHandler), not a same-page JS callback.
+const GOOGLE_CALLBACK_URL = `${import.meta.env.VITE_API_BASE_URL as string}/auth/google/callback`;
 
 function GoogleIcon() {
   return (
@@ -19,29 +22,19 @@ function GoogleIcon() {
 }
 
 interface OAuthButtonsProps {
-  onAuthenticated: (isNewUser: boolean) => void;
+  /** Runs synchronously right as the Google button is clicked, before the
+   * page navigates away — the caller's chance to persist anything (return
+   * path, in-progress state) that needs to survive the round trip. */
+  onBeforeGoogleRedirect?: () => void;
 }
 
-export function OAuthButtons({ onAuthenticated }: OAuthButtonsProps) {
-  const authenticateAndMergeCart = useAuthenticateAndMergeCart();
-
-  const handleGoogleSuccess = async (credentialResponse: { credential?: string }) => {
-    if (!credentialResponse.credential) return;
-    try {
-      const result = await googleLoginApi(credentialResponse.credential);
-      await authenticateAndMergeCart(result.accessToken, result.user);
-      onAuthenticated(result.isNewUser);
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  };
-
+export function OAuthButtons({ onBeforeGoogleRedirect }: OAuthButtonsProps) {
   return (
     <div className="space-y-2.5">
       {/* Google's own button can't be restyled, so we render it invisible and on
           top (to keep receiving real clicks), with a site-styled button underneath
           for the visuals — a standard trick for @react-oauth/google. */}
-      <div className="group relative w-full h-10 rounded-xl border border-border overflow-hidden">
+      <div className="group relative w-full h-10 rounded-xl border border-border overflow-hidden" onClickCapture={onBeforeGoogleRedirect}>
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm font-semibold group-hover:bg-muted transition-colors pointer-events-none">
           <GoogleIcon />
           <span>Sign in with Google</span>
@@ -51,7 +44,13 @@ export function OAuthButtons({ onAuthenticated }: OAuthButtonsProps) {
             the width prop changes afterward, so a static, generously wide value
             plus overflow-hidden on the container above is what keeps this robust. */}
         <div className="absolute top-0 left-0 opacity-0">
-          <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => toast.error("Google sign-in failed.")} width="400" />
+          <GoogleLogin
+            onSuccess={() => {}}
+            onError={() => toast.error("Google sign-in failed. Please try again.")}
+            ux_mode="redirect"
+            login_uri={GOOGLE_CALLBACK_URL}
+            width="400"
+          />
         </div>
       </div>
     </div>

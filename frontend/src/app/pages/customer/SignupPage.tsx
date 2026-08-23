@@ -6,6 +6,7 @@ import { AuthLayout } from "../../components/common/AuthLayout";
 import { OAuthButtons } from "../../components/common/OAuthButtons";
 import { customerSignup, resendVerification } from "../../lib/api/endpoints/auth";
 import { setPostVerifyRedirect, takePostVerifyRedirect } from "../../lib/postVerifyRedirect";
+import { setOAuthRedirectContext } from "../../lib/oauthRedirectContext";
 import { usePollForVerification } from "../../hooks/usePollForVerification";
 
 function errorMessage(err: unknown): string {
@@ -134,12 +135,7 @@ export function SignupPage() {
         <div className="flex-1 h-px bg-border" />
       </div>
 
-      <OAuthButtons
-        onAuthenticated={(isNewUser) => {
-          if (isNewUser) navigate("/complete-profile", { state: { from } });
-          else navigate(from ? `${from.pathname}${from.search ?? ""}` : "/account");
-        }}
-      />
+      <OAuthButtons onBeforeGoogleRedirect={() => setOAuthRedirectContext({ returnPath: from ? `${from.pathname}${from.search ?? ""}` : "/account" })} />
 
       <p className="text-center text-sm text-muted-foreground mt-6">
         Already have an account? <Link to="/login" className="text-primary font-semibold hover:underline">Sign in</Link>

@@ -15,6 +15,7 @@ import { customerLogin, customerSignup, resendVerification } from "../../lib/api
 import { initiatePayment } from "../../lib/api/endpoints/payments";
 import { quoteCart } from "../../lib/api/endpoints/cart";
 import { setPostVerifyRedirect } from "../../lib/postVerifyRedirect";
+import { setOAuthRedirectContext } from "../../lib/oauthRedirectContext";
 import type { Address } from "../../types/address";
 import type { PaymentMethod } from "../../types/order";
 import type { CartQuoteLineItem } from "../../types/cart";
@@ -140,6 +141,8 @@ export function CheckoutPage() {
 // cart via the same shared hook LoginPage uses, and only then flips
 // AuthContext, so CheckoutWizard mounts with the merge already complete.
 function CheckoutAuthGate() {
+  const location = useLocation();
+  const buyNow = (location.state as { buyNow?: CartQuoteLineItem } | null)?.buyNow;
   const authenticateAndMergeCart = useAuthenticateAndMergeCart();
 
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -287,7 +290,7 @@ function CheckoutAuthGate() {
           <div className="flex-1 h-px bg-border" />
         </div>
 
-        <OAuthButtons onAuthenticated={() => { /* AuthContext flip triggers CheckoutWizard to mount */ }} />
+        <OAuthButtons onBeforeGoogleRedirect={() => setOAuthRedirectContext({ returnPath: "/checkout", buyNow })} />
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           {mode === "login" ? (

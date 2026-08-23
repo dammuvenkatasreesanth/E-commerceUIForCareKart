@@ -39,6 +39,10 @@ authRouter.post("/reset-password", validate({ body: resetPasswordSchema }), asyn
 
 // Customer: OAuth
 authRouter.post("/google", validate({ body: googleLoginSchema }), asyncHandler(controller.googleLoginHandler));
+// Redirect-mode target for the Google sign-in button — a real browser form
+// POST from accounts.google.com, not an XHR, so no JSON body validation here
+// (the handler itself checks for a credential and always ends in a redirect).
+authRouter.post("/google/callback", asyncHandler(controller.googleRedirectCallbackHandler));
 authRouter.post("/facebook", validate({ body: facebookLoginSchema }), asyncHandler(controller.facebookLoginHandler));
 
 // Staff: email + password

@@ -17,6 +17,7 @@ import { VerifyEmailPage } from "../pages/customer/VerifyEmailPage";
 import { ForgotPasswordPage } from "../pages/customer/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/customer/ResetPasswordPage";
 import { CompleteProfilePage } from "../pages/customer/CompleteProfilePage";
+import { GoogleAuthCompletePage } from "../pages/customer/GoogleAuthCompletePage";
 import { AccountHomePage } from "../pages/customer/account/AccountHomePage";
 import { OrdersListPage } from "../pages/customer/account/OrdersListPage";
 import { OrderDetailPage } from "../pages/customer/account/OrderDetailPage";
@@ -62,6 +63,7 @@ export const router = createBrowserRouter([
       { path: "/checkout", element: <CheckoutPage /> },
       { path: "/order-confirmation", element: <OrderConfirmationPage /> },
       { path: "/verify-email", element: <VerifyEmailPage /> },
+      { path: "/auth/google/complete", element: <GoogleAuthCompletePage /> },
       {
         element: <RedirectIfAuthenticated />,
         children: [

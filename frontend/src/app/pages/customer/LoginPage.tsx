@@ -5,6 +5,7 @@ import { AuthLayout } from "../../components/common/AuthLayout";
 import { OAuthButtons } from "../../components/common/OAuthButtons";
 import { useAuthenticateAndMergeCart } from "../../hooks/useAuthenticateAndMergeCart";
 import { customerLogin } from "../../lib/api/endpoints/auth";
+import { setOAuthRedirectContext } from "../../lib/oauthRedirectContext";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -86,12 +87,7 @@ export function LoginPage() {
         <div className="flex-1 h-px bg-border" />
       </div>
 
-      <OAuthButtons
-        onAuthenticated={(isNewUser) => {
-          if (isNewUser) navigate("/complete-profile", { state: { from } });
-          else goAfterLogin();
-        }}
-      />
+      <OAuthButtons onBeforeGoogleRedirect={() => setOAuthRedirectContext({ returnPath: from ? `${from.pathname}${from.search ?? ""}` : "/account" })} />
 
       <p className="text-center text-sm text-muted-foreground mt-6">
         Don't have an account? <Link to="/signup" className="text-primary font-semibold hover:underline">Sign up</Link>
