@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { Search, X, Filter } from "lucide-react";
 import { ProductCard } from "../../components/common/ProductCard";
+import { Seo } from "../../components/common/Seo";
 import { useLegacyStore } from "../../context/LegacyStoreContext";
 import { useProducts, useCategories } from "../../hooks/useCatalog";
 import type { ProductListQuery } from "../../types/catalog";
@@ -38,9 +39,16 @@ export function ListingPage() {
   const products = data?.items ?? [];
 
   const chips = [{ slug: null as string | null, name: "All" }, ...((categories ?? []).map(c => ({ slug: c.slug, name: c.name })))];
+  const activeCategory = (categories ?? []).find((c) => c.slug === activeCategorySlug);
+  const seoTitle = activeCategory ? `${activeCategory.name} — Bulk PPE Supplies` : "Shop All Products";
+  const seoDescription = activeCategory
+    ? `Browse ${activeCategory.name.toLowerCase()} at factory-direct bulk pricing — ISO/CE/FDA certified, pan-India delivery.`
+    : "Browse the full CareKart catalog — medical gloves, masks, and PPE at factory-direct bulk pricing.";
+  const seoPath = activeCategorySlug ? `/products?category=${activeCategorySlug}` : "/products";
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-4 md:py-6 pb-24 md:pb-8">
+      <Seo title={seoTitle} description={seoDescription} path={seoPath} />
       <div className="mb-4 md:hidden"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search products…" className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-border rounded-xl focus:border-primary/40 focus:outline-none" />{searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-muted-foreground" /></button>}</div></div>
       <div className="flex flex-col md:flex-row gap-6">
         <aside className="hidden md:block w-52 flex-shrink-0">

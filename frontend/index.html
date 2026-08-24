@@ -5,9 +5,19 @@
       
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>mycarekart</title>
-      <meta name="description" content="Offers a secure e-commerce platform for medical and industrial gloves plus PPE, serving retail and bulk buyers with trusted certifications and tiered pricing." />
-      <meta name="robots" content="noindex, nofollow" />
+      <!-- Title only here — description/canonical/OG tags are set per-page by
+           the <Seo> component (see components/common/Seo.tsx). Duplicating
+           them here too doesn't work: react-helmet-async has no way to know
+           a static meta/link tag in the raw HTML is "its own" to replace
+           (that requires actual SSR with data-rh markers), so it just
+           appends a second one instead of overwriting — the crawler then
+           sees two conflicting <meta name="description"> tags, with the
+           generic one first. This app is CSR-only, so Google's JS-rendering
+           pass picks up the real per-page tags fine; the one real cost is
+           social-preview bots (WhatsApp/Facebook), which don't run JS and
+           so only ever see this bare title until this becomes SSR/prerendered. -->
+      <title>CareKart — Medical Gloves &amp; PPE Marketplace | mycarekart.com</title>
+      <meta name="robots" content="index, follow" />
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
       
     </head>

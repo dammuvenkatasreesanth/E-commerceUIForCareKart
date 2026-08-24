@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { Logo } from "../../components/Logo";
+import { Seo } from "../../components/common/Seo";
 import { BannerCarousel } from "../../components/common/BannerCarousel";
 import { ProductCard } from "../../components/common/ProductCard";
 import { Stars } from "../../components/common/Stars";
@@ -43,6 +44,11 @@ export function HomePage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 pb-24 md:pb-8">
+      <Seo
+        title="CareKart — Medical Gloves & PPE Marketplace"
+        description="India's B2B PPE marketplace — factory-direct nitrile and latex gloves, N95 masks, and PPE kits for hospitals, clinics, and retailers. Bulk pricing, ISO/CE/FDA certified, pan-India delivery."
+        path="/"
+      />
       {/* Banner carousel */}
       {!bannersLoading && <BannerCarousel banners={banners} />}
 

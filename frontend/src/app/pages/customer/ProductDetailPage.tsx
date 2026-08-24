@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { Stars } from "../../components/common/Stars";
+import { Seo } from "../../components/common/Seo";
 import { useProduct } from "../../hooks/useCatalog";
 import { useAddToCart } from "../../hooks/useCart";
 import { useAuth } from "../../context/AuthContext";
@@ -121,6 +122,31 @@ export function ProductDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-4 md:py-6 pb-24 md:pb-8">
+      <Seo
+        title={product.name}
+        description={product.tagline || product.description.slice(0, 160)}
+        path={`/products/${product.slug}`}
+        image={product.images[0]?.url}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: product.name,
+          description: product.description,
+          image: product.images.map((i) => i.url),
+          sku: String(product.id),
+          brand: { "@type": "Brand", name: "CareKart" },
+          offers: {
+            "@type": "Offer",
+            url: `https://mycarekart.com/products/${product.slug}`,
+            priceCurrency: "INR",
+            price: product.price,
+            availability: product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+          },
+          ...(product.ratingCount > 0
+            ? { aggregateRating: { "@type": "AggregateRating", ratingValue: product.ratingAvg, reviewCount: product.ratingCount } }
+            : {}),
+        }}
+      />
       <button onClick={() => navigate("/products")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"><ArrowLeft className="w-4 h-4" /> Back</button>
       <div className="grid md:grid-cols-2 gap-6 md:gap-8 mb-8">
         {/* Media column */}
