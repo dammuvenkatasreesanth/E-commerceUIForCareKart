@@ -1,9 +1,18 @@
 RewriteEngine On
 RewriteBase /
 
-# Serve real files and directories as-is (JS, CSS, images, etc.)
-RewriteCond %{REQUEST_FILENAME} -f [OR]
-RewriteCond %{REQUEST_FILENAME} -d
+# Serve real files as-is (JS, CSS, images, etc.) — deliberately NOT matching
+# real directories here too: public/products/ (product image assets) shares
+# its name with the app's /products route (the listing page). Matching -d
+# let Apache's own directory handling take over for the bare /products path,
+# which auto-redirects to /products/ (mod_dir's DirectorySlash) before this
+# file's own rewrite rules ever run — that redirect was flagged by Google
+# Search Console as an indexing issue on the canonical listing-page URL, and
+# it also mismatched the canonical tag the app itself declares. Individual
+# files inside that directory (e.g. /products/some-image.png) still match
+# -f above and serve directly; it's only the bare directory path that
+# needs to fall through to the SPA instead of Apache's default handling.
+RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
 # Everything else falls back to index.html so React Router can handle it
