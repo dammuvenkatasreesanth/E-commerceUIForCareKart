@@ -18,6 +18,7 @@ import { ForgotPasswordPage } from "../pages/customer/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/customer/ResetPasswordPage";
 import { CompleteProfilePage } from "../pages/customer/CompleteProfilePage";
 import { GoogleAuthCompletePage } from "../pages/customer/GoogleAuthCompletePage";
+import { ContentPage } from "../pages/customer/ContentPage";
 import { AccountHomePage } from "../pages/customer/account/AccountHomePage";
 import { OrdersListPage } from "../pages/customer/account/OrdersListPage";
 import { OrderDetailPage } from "../pages/customer/account/OrderDetailPage";
@@ -64,6 +65,11 @@ export const router = createBrowserRouter([
       { path: "/order-confirmation", element: <OrderConfirmationPage /> },
       { path: "/verify-email", element: <VerifyEmailPage /> },
       { path: "/auth/google/complete", element: <GoogleAuthCompletePage /> },
+      { path: "/about-us", element: <ContentPage slug="about-us" /> },
+      { path: "/privacy-policy", element: <ContentPage slug="privacy-policy" /> },
+      { path: "/terms-conditions", element: <ContentPage slug="terms-conditions" /> },
+      { path: "/shipping-delivery-policy", element: <ContentPage slug="shipping-delivery-policy" /> },
+      { path: "/cancellation-refund-policy", element: <ContentPage slug="cancellation-refund-policy" /> },
       {
         element: <RedirectIfAuthenticated />,
         children: [

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { ArrowLeft, ShieldCheck, Lock, Truck } from "lucide-react";
 import carekartLogo from "@/imports/_Linked_File_.png";
 
@@ -75,7 +75,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         </div>
 
         <div className="px-6 md:px-10 pb-6 text-center">
-          <p className="text-[10px] text-muted-foreground">© 2025 CareKart Pvt. Ltd. · By continuing you agree to our <span className="underline cursor-pointer">Terms</span> &amp; <span className="underline cursor-pointer">Privacy Policy</span></p>
+          <p className="text-[10px] text-muted-foreground">© 2025 Potent Brand Solutions Pvt. Ltd. · By continuing you agree to our <Link to="/terms-conditions" className="underline">Terms</Link> &amp; <Link to="/privacy-policy" className="underline">Privacy Policy</Link></p>
         </div>
       </div>
     </div>

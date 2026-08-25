@@ -1,11 +1,9 @@
 import { useNavigate } from "react-router";
 import {
   ChevronRight, Users, Package, Truck, Zap,
-  Check, ShieldCheck, BadgeCheck, Lock,
-  Facebook, Twitter, Instagram, Phone, Mail, Globe,
+  Check, ShieldCheck, BadgeCheck,
 } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
-import { Logo } from "../../components/Logo";
 import { Seo } from "../../components/common/Seo";
 import { BannerCarousel } from "../../components/common/BannerCarousel";
 import { ProductCard } from "../../components/common/ProductCard";
@@ -77,7 +75,7 @@ export function HomePage() {
                 <ImageWithFallback src={cat.imageUrl ?? undefined} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
               </div>
-              <span className="text-[9px] md:text-[10px] font-semibold text-center leading-tight text-foreground">{cat.name}</span>
+              <span className="text-xs md:text-sm font-semibold text-center leading-tight text-foreground">{cat.name}</span>
             </button>
           ))}
         </div>
@@ -170,51 +168,6 @@ export function HomePage() {
           ))}
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="border-t border-border pt-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-          <div className="col-span-2 md:col-span-1">
-            <div className="mb-3">
-              <Logo className="h-7" />
-            </div>
-            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">India's trusted B2B PPE marketplace. Factory-direct pricing for hospitals, clinics &amp; retailers.</p>
-            <div className="flex items-center gap-3 mb-4">
-              {[Facebook, Twitter, Instagram].map((Icon, i) => <button key={i} className="w-8 h-8 bg-muted hover:bg-primary/10 rounded-lg flex items-center justify-center transition-colors"><Icon className="w-4 h-4 text-muted-foreground" /></button>)}
-            </div>
-            <div className="space-y-1.5 text-xs text-muted-foreground">
-              <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />+91 80 4567 8900</p>
-              <p className="flex items-center gap-1.5"><Mail className="w-3 h-3" />support@carekart.in</p>
-              <p className="flex items-center gap-1.5"><Globe className="w-3 h-3" />www.carekart.in</p>
-            </div>
-          </div>
-          {[
-            { title: "Products", links: ["Nitrile Gloves", "Latex Gloves", "Vinyl Gloves", "N95 Masks", "Face Shields", "PPE Kits", "Sanitizers", "Lab Coats"] },
-            { title: "Company", links: ["About Us", "Careers", "Press / Media", "Certifications", "CSR Initiatives", "Partner with Us"] },
-            { title: "Support", links: ["Help Centre", "Track My Order", "Returns & Refunds", "Bulk Enquiry", "GST Invoice Help", "Contact Us"] },
-          ].map(col => (
-            <div key={col.title}>
-              <p className="font-bold text-sm mb-3">{col.title}</p>
-              <div className="space-y-2">{col.links.map(l => <p key={l} className="text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors">{l}</p>)}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Certifications */}
-        <div className="border-t border-border py-4 flex flex-wrap items-center justify-center gap-4">
-          {["ISO 13485", "CE Mark", "FDA Listed", "FSSAI", "BIS"].map(c => <span key={c} className="px-3 py-1 bg-muted rounded-lg text-[11px] font-semibold text-muted-foreground">{c}</span>)}
-        </div>
-
-        {/* Bottom bar */}
-        <div className="border-t border-border pt-4 pb-2 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-          <p>© 2025 CareKart Pvt. Ltd. All rights reserved. GST: 27AABCC1234M1Z5</p>
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1"><Lock className="w-3 h-3" />256-bit SSL</span>
-            <span>Privacy Policy</span>
-            <span>Terms of Use</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

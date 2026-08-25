@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from "react-router";
 import { Header } from "../components/common/Header";
+import { Footer } from "../components/common/Footer";
 import { MobileBottomNav } from "../components/common/MobileBottomNav";
 import { useLegacyStore } from "../context/LegacyStoreContext";
 import { useAuth } from "../context/AuthContext";
@@ -31,6 +32,7 @@ export function CustomerLayout() {
         />
       )}
       <Outlet />
+      {!hideChrome && <Footer />}
       {!hideChrome && <MobileBottomNav cartCount={cartCount} isLoggedIn={isLoggedIn} />}
     </div>
   );
