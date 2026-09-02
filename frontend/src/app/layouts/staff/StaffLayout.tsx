@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router";
 import { LogOut, Menu, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Logo } from "../../components/Logo";
+import { useScrollToTop } from "../../hooks/useScrollToTop";
 
 export interface StaffNavItem {
   to: string;
@@ -12,6 +13,7 @@ export interface StaffNavItem {
 }
 
 export function StaffLayout({ portalName, navItems }: { portalName: string; navItems: StaffNavItem[] }) {
+  useScrollToTop();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);

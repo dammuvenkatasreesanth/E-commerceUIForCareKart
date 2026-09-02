@@ -37,6 +37,7 @@ export interface Banner {
   ctaPrimary: string;
   ctaPrimaryLink: string;
   ctaSecondary: string;
+  ctaSecondaryLink: string;
   bg: string;
   imageUrl: string;
 }

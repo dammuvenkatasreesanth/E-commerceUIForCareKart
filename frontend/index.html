@@ -17,17 +17,33 @@
            social-preview bots (WhatsApp/Facebook), which don't run JS and
            so only ever see this bare title until this becomes SSR/prerendered. -->
       <title>CareKart — Medical Gloves &amp; PPE Marketplace | mycarekart.com</title>
+      <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      <link rel="apple-touch-icon" href="/favicon.svg" />
       <meta name="robots" content="index, follow" />
       <meta name="google-site-verification" content="NZEQM10ywJrSYiZBJXb_T_9Fr0MmM2UyCIuzUJxpEP0" />
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
-      
+      <style>
+        html, body { height: 100%; margin: 0; }
+        #root { height: 100%; }
+        /* Splash shown before the React bundle boots — plain HTML/CSS inside
+           #root so it needs no JS of its own. createRoot().render() replaces
+           #root's entire contents on mount, so this disappears on its own;
+           nothing needs to remove it explicitly. */
+        #app-splash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #ffffff; }
+        #app-splash .mark { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; font-weight: 800; font-size: 28px; color: #12213f; }
+        #app-splash .mark span { color: #22c55e; }
+        #app-splash .spinner { width: 26px; height: 26px; border: 3px solid #e5e7eb; border-top-color: #22c55e; border-radius: 50%; animation: app-splash-spin 0.7s linear infinite; }
+        @keyframes app-splash-spin { to { transform: rotate(360deg); } }
+      </style>
+
     </head>
 
     <body>
-      
-      <div id="root"></div>
+
+      <div id="root">
+        <div id="app-splash"><div class="spinner"></div><div class="mark">care<span>k</span>art</div></div>
+      </div>
       <script type="module" src="/src/main.tsx"></script>
-      
+
     </body>
   </html>
   

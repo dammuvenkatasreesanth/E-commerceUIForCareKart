@@ -48,7 +48,7 @@ export function useSetBoxSizes() {
 export function useAddProductImage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, file }: { id: number; file: File }) => api.addProductImage(id, file),
+    mutationFn: ({ id, file, onProgress }: { id: number; file: File; onProgress?: (percent: number) => void }) => api.addProductImage(id, file, onProgress),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY }),
   });
 }
@@ -71,7 +71,7 @@ export function useImportProductsCsv() {
 
 export function useUploadProductVideo() {
   return useMutation({
-    mutationFn: ({ id, file }: { id: number; file: File }) => api.uploadProductVideo(id, file),
+    mutationFn: ({ id, file, onProgress }: { id: number; file: File; onProgress?: (percent: number) => void }) => api.uploadProductVideo(id, file, onProgress),
   });
 }
 
@@ -105,6 +105,6 @@ export function useDeleteCategory() {
 
 export function useUploadCategoryImage() {
   return useMutation({
-    mutationFn: (file: File) => api.uploadCategoryImage(file),
+    mutationFn: ({ file, onProgress }: { file: File; onProgress?: (percent: number) => void }) => api.uploadCategoryImage(file, onProgress),
   });
 }

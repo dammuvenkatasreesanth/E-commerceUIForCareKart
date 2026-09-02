@@ -34,9 +34,23 @@ export async function validateUploadedFile(
   // an ESM package from this CommonJS backend.
   const { fileTypeFromBuffer } = await import("file-type");
   const detected = await fileTypeFromBuffer(buffer);
-  if (!detected || detected.mime !== declaredMimetype) {
+  if (!detected) {
     throw new BadRequestError("File content does not match its declared type.");
   }
 
-  return { ext, contentType: declaredMimetype };
+  // Trust the sniffed bytes over the browser-declared mimetype, as long as
+  // they land on something in the same allowlisted table — requiring an
+  // *exact* match rejected real files. Phones commonly hand the browser one
+  // label (e.g. iOS reporting "video/quicktime" for a .mov that is actually
+  // ISO-BMFF/MP4-compatible underneath, or a browser normalizing "image/jpg"
+  // vs "image/jpeg") while the true content is still a perfectly valid file
+  // of the same kind. Using the detected type as the source of truth for
+  // ext/contentType keeps the security property (bytes are genuinely a
+  // supported image/video) without those false-positive rejections.
+  const detectedExt = table[detected.mime];
+  if (!detectedExt) {
+    throw new BadRequestError("File content does not match its declared type.");
+  }
+
+  return { ext: detectedExt, contentType: detected.mime };
 }

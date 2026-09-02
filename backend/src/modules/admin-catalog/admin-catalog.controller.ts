@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import * as service from "./admin-catalog.service";
-import { uploadToR2 } from "../../providers/storage/r2-storage";
+import { uploadToCloudinary } from "../../providers/storage/cloudinary-storage";
 import { validateUploadedFile } from "../../lib/fileValidation";
 import { parseIdParam } from "../../lib/parseId";
 import { BadRequestError } from "../../lib/errors";
@@ -45,7 +45,7 @@ export async function addImage(req: Request, res: Response) {
   const id = parseIdParam(req.params.id);
   if (!req.file) throw new BadRequestError("No image file uploaded");
   const { ext, contentType } = await validateUploadedFile(req.file.buffer, req.file.mimetype, "image");
-  const url = await uploadToR2("product-images", req.file.buffer, ext, contentType);
+  const url = await uploadToCloudinary("product-images", req.file.buffer, ext, contentType);
   const image = await service.addProductImage(id, url);
   res.status(201).json(image);
 }
@@ -62,7 +62,7 @@ export async function removeImage(req: Request, res: Response) {
 export async function uploadVideo(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError("No video file uploaded");
   const { ext, contentType } = await validateUploadedFile(req.file.buffer, req.file.mimetype, "video");
-  const url = await uploadToR2("product-videos", req.file.buffer, ext, contentType);
+  const url = await uploadToCloudinary("product-videos", req.file.buffer, ext, contentType);
   res.status(201).json({ url });
 }
 
@@ -86,7 +86,7 @@ export async function deleteCategory(req: Request, res: Response) {
 export async function uploadCategoryImage(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError("No image file uploaded");
   const { ext, contentType } = await validateUploadedFile(req.file.buffer, req.file.mimetype, "image");
-  const url = await uploadToR2("categories", req.file.buffer, ext, contentType);
+  const url = await uploadToCloudinary("categories", req.file.buffer, ext, contentType);
   res.status(201).json({ url });
 }
 

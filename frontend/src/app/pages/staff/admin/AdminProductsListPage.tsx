@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Download, Upload, X, Video, Trash2 } from "lucide-react";
 import { DataTable, type DataTableColumn } from "../../../components/common/DataTable";
+import { UploadProgressBar } from "../../../components/common/UploadProgressBar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
 import {
   useAdminProducts,
@@ -89,6 +90,8 @@ export function AdminProductsListPage() {
   const [isSavingTiers, setIsSavingTiers] = useState(false);
   const [boxSizeRows, setBoxSizeRows] = useState<BoxSizeForm[]>([]);
   const [isSavingBoxSizes, setIsSavingBoxSizes] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState<number | null>(null);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
   // `editing` is a snapshot from when the dialog opened — refetch by id so the
   // images grid reflects adds/removes without needing to close and reopen.
   const { data: liveEditingProduct } = useAdminProduct(editing?.id);
@@ -213,9 +216,13 @@ export function AdminProductsListPage() {
   const handleAddImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editing) return;
+    setImageUploadProgress(0);
     addProductImage.mutate(
-      { id: editing.id, file },
-      { onError: (err: Error) => toast.error(err.message) },
+      { id: editing.id, file, onProgress: setImageUploadProgress },
+      {
+        onError: (err: Error) => toast.error(err.message),
+        onSettled: () => setImageUploadProgress(null),
+      },
     );
     e.target.value = "";
   };
@@ -228,14 +235,16 @@ export function AdminProductsListPage() {
   const handleUploadVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editing) return;
+    setVideoUploadProgress(0);
     uploadProductVideo.mutate(
-      { id: editing.id, file },
+      { id: editing.id, file, onProgress: setVideoUploadProgress },
       {
         onSuccess: ({ url }) => {
           setForm((f) => ({ ...f, videoUrl: url }));
           toast.success("Video uploaded — click Save Product to apply it");
         },
         onError: (err: Error) => toast.error(err.message),
+        onSettled: () => setVideoUploadProgress(null),
       },
     );
     e.target.value = "";
@@ -415,9 +424,10 @@ export function AdminProductsListPage() {
                     )}
                     <label className={`inline-flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs font-semibold cursor-pointer ${uploadProductVideo.isPending ? "opacity-50 pointer-events-none" : ""}`}>
                       <Video className="w-3.5 h-3.5" />
-                      {uploadProductVideo.isPending ? "Uploading…" : form.videoUrl ? "Replace Video" : "Upload Video"}
+                      {uploadProductVideo.isPending ? `Uploading… ${videoUploadProgress ?? 0}%` : form.videoUrl ? "Replace Video" : "Upload Video"}
                       <input type="file" accept="video/*" className="hidden" onChange={handleUploadVideo} />
                     </label>
+                    {videoUploadProgress !== null && <UploadProgressBar percent={videoUploadProgress} />}
                   </div>
                 ) : (
                   <p className="text-[11px] text-muted-foreground">Save the product first — then you can upload a video here.</p>
@@ -506,9 +516,10 @@ export function AdminProductsListPage() {
                   </div>
                   <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold cursor-pointer ${addProductImage.isPending ? "opacity-50 pointer-events-none" : ""}`}>
                     <Upload className="w-3.5 h-3.5" />
-                    {addProductImage.isPending ? "Uploading…" : "Add Image"}
+                    {addProductImage.isPending ? `Uploading… ${imageUploadProgress ?? 0}%` : "Add Image"}
                     <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
                   </label>
+                  {imageUploadProgress !== null && <div className="max-w-xs"><UploadProgressBar percent={imageUploadProgress} /></div>}
                 </>
               ) : (
                 <p className="text-[11px] text-muted-foreground">Save the product first — then you can add images here.</p>

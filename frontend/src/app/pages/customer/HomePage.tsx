@@ -32,6 +32,7 @@ export function HomePage() {
     ctaPrimary: b.ctaPrimaryText ?? "",
     ctaPrimaryLink: b.ctaPrimaryLink ?? "",
     ctaSecondary: b.ctaSecondaryText ?? "",
+    ctaSecondaryLink: b.ctaSecondaryLink ?? "",
     bg: b.bgGradient ?? "royal",
     imageUrl: b.imageUrl ?? "",
   }));

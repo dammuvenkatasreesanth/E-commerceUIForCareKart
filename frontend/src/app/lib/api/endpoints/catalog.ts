@@ -20,3 +20,7 @@ export function getProduct(slug: string): Promise<ProductDetail> {
 export function autosuggest(q: string): Promise<{ id: number; name: string; slug: string; image: string | null }[]> {
   return api.get(`/catalog/search/autosuggest${buildQuery({ q })}`);
 }
+
+export function lookupPincode(pincode: string): Promise<{ city: string; state: string } | null> {
+  return api.get(`/catalog/pincode/${pincode}`);
+}

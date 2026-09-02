@@ -188,9 +188,14 @@ export function OrderDetailPage() {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-3 mb-4">
-        <button onClick={handleInvoice} disabled={isDownloading} className="flex items-center gap-1.5 px-4 py-2.5 bg-primary text-white text-sm font-bold rounded-xl disabled:opacity-50">
-          <Download className="w-4 h-4" />{isDownloading ? "Downloading…" : "Invoice"}
-        </button>
+        {/* Payment for this order never actually completed (see
+            payments.service.ts's auto-cancel branch) — there's no real sale
+            to invoice, so the backend rejects it; don't even offer the button. */}
+        {!(order.status === "CANCELLED" && order.paymentStatus === "FAILED") && (
+          <button onClick={handleInvoice} disabled={isDownloading} className="flex items-center gap-1.5 px-4 py-2.5 bg-primary text-white text-sm font-bold rounded-xl disabled:opacity-50">
+            <Download className="w-4 h-4" />{isDownloading ? "Downloading…" : "Invoice"}
+          </button>
+        )}
         <button onClick={handleReorder} disabled={reorderMutation.isPending} className="flex items-center gap-1.5 px-4 py-2.5 border border-border text-sm font-semibold rounded-xl disabled:opacity-50">
           <RefreshCw className="w-4 h-4" />{reorderMutation.isPending ? "Adding…" : "Reorder"}
         </button>

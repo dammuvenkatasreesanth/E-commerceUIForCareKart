@@ -19,6 +19,8 @@ import { setOAuthRedirectContext } from "../../lib/oauthRedirectContext";
 import type { Address } from "../../types/address";
 import type { PaymentMethod } from "../../types/order";
 import type { CartQuoteLineItem } from "../../types/cart";
+import { usePincodeAutofill } from "../../hooks/usePincodeAutofill";
+import { isValidPhone, isValidPincode, mapsUrlForAddress } from "../../lib/addressValidation";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -50,6 +52,15 @@ function AddressList({ addresses, selectedAddressId, onSelect }: { addresses: Ad
             <p className="font-semibold text-sm">{addr.name}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{addr.line1}, {addr.city}, {addr.state} — {addr.pincode}</p>
             <p className="text-xs text-muted-foreground mt-0.5">📞 {addr.phone}</p>
+            <a
+              href={mapsUrlForAddress(addr)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+            >
+              <MapPin className="w-3 h-3" />View on map
+            </a>
           </div>
         </label>
       ))}
@@ -58,6 +69,13 @@ function AddressList({ addresses, selectedAddressId, onSelect }: { addresses: Ad
 }
 
 function AddressForm({ value, onChange, onSave, onCancel, isSaving }: { value: NewAddressForm; onChange: (v: NewAddressForm) => void; onSave: () => void; onCancel: () => void; isSaving: boolean }) {
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const { isLoading: isLookingUpPincode } = usePincodeAutofill(value.pin, (city, state) => {
+    onChange({ ...value, city, state });
+  });
+  const phoneValid = value.phone === "" || isValidPhone(value.phone);
+  const pincodeValid = value.pin === "" || isValidPincode(value.pin);
+
   return (
     <div>
       <div className="flex gap-2 mb-3">
@@ -68,24 +86,51 @@ function AddressForm({ value, onChange, onSave, onCancel, isSaving }: { value: N
         ))}
       </div>
       <div className="space-y-3">
-        {[
-          { k: "name", label: "Full Name", ph: "Recipient name" },
-          { k: "line1", label: "Address", ph: "Flat, Street, Area" },
-          { k: "city", label: "City", ph: "Mumbai" },
-          { k: "state", label: "State", ph: "Maharashtra" },
-          { k: "pin", label: "PIN Code", ph: "400001" },
-          { k: "phone", label: "Phone", ph: "9876543210" },
-        ].map((f) => (
-          <div key={f.k}>
-            <label className="block text-xs font-semibold mb-1">{f.label}</label>
+        <div>
+          <label className="block text-xs font-semibold mb-1">Full Name</label>
+          <input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Recipient name" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold mb-1">PIN Code</label>
+          <div className="relative">
             <input
-              value={(value as Record<string, string>)[f.k]}
-              onChange={(e) => onChange({ ...value, [f.k]: e.target.value })}
-              placeholder={f.ph}
-              className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm"
+              value={value.pin}
+              onChange={(e) => onChange({ ...value, pin: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+              onBlur={() => setTouched((t) => ({ ...t, pin: true }))}
+              placeholder="400001"
+              inputMode="numeric"
+              className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.pin && !pincodeValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
             />
+            {isLookingUpPincode && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">Looking up…</span>}
           </div>
-        ))}
+          {touched.pin && !pincodeValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 6-digit pincode</p>}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold mb-1">City</label>
+            <input value={value.city} onChange={(e) => onChange({ ...value, city: e.target.value })} placeholder="Mumbai" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">State</label>
+            <input value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value })} placeholder="Maharashtra" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold mb-1">Address</label>
+          <input value={value.line1} onChange={(e) => onChange({ ...value, line1: e.target.value })} placeholder="Flat, Street, Area" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold mb-1">Phone</label>
+          <input
+            value={value.phone}
+            onChange={(e) => onChange({ ...value, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+            onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
+            placeholder="9876543210"
+            inputMode="numeric"
+            className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.phone && !phoneValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
+          />
+          {touched.phone && !phoneValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 10-digit mobile number</p>}
+        </div>
       </div>
       <div className="flex gap-2 mt-4">
         <button onClick={onSave} disabled={isSaving} className="flex-1 py-2.5 bg-primary text-white text-sm font-bold rounded-xl disabled:opacity-40">
@@ -371,6 +416,14 @@ function CheckoutWizard() {
   const handleSaveAddress = () => {
     if (!newAddr.name || !newAddr.line1 || !newAddr.city || !newAddr.state || !newAddr.pin || !newAddr.phone) {
       toast.error("Please fill in all address fields");
+      return;
+    }
+    if (!isValidPincode(newAddr.pin)) {
+      toast.error("Enter a valid 6-digit pincode");
+      return;
+    }
+    if (!isValidPhone(newAddr.phone)) {
+      toast.error("Enter a valid 10-digit mobile number");
       return;
     }
     createAddress.mutate(

@@ -224,6 +224,16 @@ export async function getInvoicePdf(actor: { id: number; role: Role }, orderId: 
     throw new ForbiddenError("This order does not belong to you");
   }
 
+  // A CANCELLED order with a FAILED payment means the online payment was
+  // never actually completed (see payments.service.ts's auto-cancel branch)
+  // — there's no real sale behind it, so there's nothing to invoice. A
+  // CANCELLED order that WAS paid (COD or a completed online payment,
+  // cancelled afterward) still gets its invoice, just stamped as cancelled
+  // below, since a real transaction did happen.
+  if (row.status === "CANCELLED" && row.paymentStatus === "FAILED") {
+    throw new BadRequestError("No invoice available — payment for this order was never completed.");
+  }
+
   const itemsByOrder = await loadOrderItems([orderId]);
   const order = { ...row, items: itemsByOrder.get(orderId) ?? [] };
 

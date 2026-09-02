@@ -10,7 +10,7 @@
    - `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` — first Admin login; **change the password immediately after first login** (seeding refuses to run in production with the default password anyway)
    - `GOOGLE_CLIENT_ID` — from the Google Cloud Console OAuth client (customer "Continue with Google")
    - `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` — from the Facebook Developer app (customer "Continue with Facebook")
-   - `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_PUBLIC_BASE_URL` — Cloudflare R2 bucket for product/category/banner images and product videos; upload endpoints 400 until this is configured
+   - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` — from the Cloudinary dashboard (free tier, no card required) — used for product/category/banner images and product videos; upload endpoints 400 with a clear message until this is configured
    - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` — the mailbox that ships with the Hostinger plan
    - `PHONEPE_MERCHANT_ID` / `PHONEPE_SALT_KEY` / `PHONEPE_SALT_INDEX` — from the PhonePe Business Dashboard's V1 ("Standard Checkout") Production Credentials — this account is on the V1 flow, not V2, so there's no separate webhook username/password to set; the callback signature reuses the Salt Key
    - `PHONEPE_ENV=PROD`
@@ -33,6 +33,6 @@ Set Hostinger's Node app entry point to `dist/src/server.js` and its startup com
 ## Notes
 
 - The backend talks to MySQL via Drizzle ORM + the `mysql2` driver — a plain Node.js TCP client with no native/Rust runtime. There is no `prisma generate`/`prisma migrate` step; schema changes are applied directly against the database (see `backend/src/db/schema.ts` for the current schema, and `backend/prisma/migrations/` for the historical SQL log from when this project used Prisma).
-- Product/category/banner images and product videos go straight to Cloudflare R2 — nothing is written to local disk, so this survives redeploys regardless of whether the platform preserves the app's working directory between deploys.
+- Product/category/banner images and product videos go straight to Cloudinary — nothing is written to local disk, so this survives redeploys regardless of whether the platform preserves the app's working directory between deploys. (Chosen over Cloudflare R2 specifically because R2 requires a card on file to activate even on its free tier.)
 - The in-process payment reconciliation sweep and any other background timers only run in the single Node process — this deployment assumes one instance, not a multi-instance/load-balanced setup.
 - `trust proxy` is enabled automatically when `NODE_ENV=production`, which is required for rate limiting and `req.ip` to see the real client IP behind Hostinger's reverse proxy.

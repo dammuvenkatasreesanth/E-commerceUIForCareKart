@@ -22,11 +22,14 @@ const envSchema = z.object({
   FACEBOOK_APP_ID: z.string().optional().default(""),
   FACEBOOK_APP_SECRET: z.string().optional().default(""),
 
-  R2_ACCOUNT_ID: z.string().optional().default(""),
-  R2_ACCESS_KEY_ID: z.string().optional().default(""),
-  R2_SECRET_ACCESS_KEY: z.string().optional().default(""),
-  R2_BUCKET_NAME: z.string().optional().default(""),
-  R2_PUBLIC_BASE_URL: z.string().optional().default(""),
+  // Product/category/banner images and product videos — free-tier Cloudinary,
+  // chosen over local disk storage specifically because Hostinger's redeploy
+  // process doesn't guarantee the app's working directory survives between
+  // deploys (see backend/DEPLOY.md), and over R2 because it needs no card on
+  // file to activate. Uploads 400 with a clear message until these are set.
+  CLOUDINARY_CLOUD_NAME: z.string().optional().default(""),
+  CLOUDINARY_API_KEY: z.string().optional().default(""),
+  CLOUDINARY_API_SECRET: z.string().optional().default(""),
 
   SMTP_HOST: z.string().optional().default(""),
   SMTP_PORT: z.coerce.number().default(587),

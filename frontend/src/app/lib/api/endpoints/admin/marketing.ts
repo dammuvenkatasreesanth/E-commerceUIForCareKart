@@ -1,4 +1,5 @@
 import { api } from "../../client";
+import { uploadFormData } from "../../uploadWithProgress";
 import type { AdminCoupon, AdminBanner, ContentPage, Campaign, AdminSetting } from "../../../../types/admin";
 
 // ─── Coupons ──────────────────────────────────────────────────────────────
@@ -60,10 +61,10 @@ export function deleteBanner(id: number): Promise<void> {
   return api.delete(`/admin/banners/${id}`);
 }
 
-export function uploadBannerImage(file: File): Promise<{ url: string }> {
+export function uploadBannerImage(file: File, onProgress?: (percent: number) => void): Promise<{ url: string }> {
   const form = new FormData();
   form.append("image", file);
-  return api.postForm("/admin/banners/upload-image", form);
+  return uploadFormData("/admin/banners/upload-image", form, onProgress);
 }
 
 // ─── Content pages ────────────────────────────────────────────────────────

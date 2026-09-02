@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import * as service from "./marketing.service";
 import { parseIdParam } from "../../lib/parseId";
 import { writeAudit } from "../../middleware/audit.middleware";
-import { uploadToR2 } from "../../providers/storage/r2-storage";
+import { uploadToCloudinary } from "../../providers/storage/cloudinary-storage";
 import { validateUploadedFile } from "../../lib/fileValidation";
 import { BadRequestError } from "../../lib/errors";
 
@@ -45,7 +45,7 @@ export async function deleteBanner(req: Request, res: Response) {
 export async function uploadBannerImage(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError("No image file uploaded");
   const { ext, contentType } = await validateUploadedFile(req.file.buffer, req.file.mimetype, "image");
-  const url = await uploadToR2("banners", req.file.buffer, ext, contentType);
+  const url = await uploadToCloudinary("banners", req.file.buffer, ext, contentType);
   res.status(201).json({ url });
 }
 

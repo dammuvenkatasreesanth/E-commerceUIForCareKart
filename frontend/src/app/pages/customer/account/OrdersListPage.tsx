@@ -73,7 +73,10 @@ function OrderCard({ order, onView }: { order: import("../../../types/order").Or
       </div>
       <div className="px-4 pb-4 flex flex-wrap gap-2">
         <button onClick={onView} className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-xl"><Eye className="w-3.5 h-3.5" />View Details</button>
-        <button onClick={handleInvoice} className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl"><Download className="w-3.5 h-3.5" />Invoice</button>
+        {/* No real sale to invoice when the payment was never completed — see OrderDetailPage.tsx. */}
+        {!(order.status === "CANCELLED" && order.paymentStatus === "FAILED") && (
+          <button onClick={handleInvoice} className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl"><Download className="w-3.5 h-3.5" />Invoice</button>
+        )}
         <button onClick={handleReorder} disabled={reorderMutation.isPending} className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-semibold rounded-xl disabled:opacity-50"><RefreshCw className="w-3.5 h-3.5" />{reorderMutation.isPending ? "Adding…" : "Reorder"}</button>
       </div>
     </div>

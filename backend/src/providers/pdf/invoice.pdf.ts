@@ -29,6 +29,14 @@ export function generateInvoicePdf(order: InvoiceOrder): Promise<Buffer> {
     doc.fontSize(10).fillColor("#555").text(`Invoice for Order ${order.orderNumber}`);
     doc.text(`Date: ${order.placedAt.toDateString()}`);
     doc.fillColor("#000");
+
+    if (order.status === "CANCELLED") {
+      doc.moveDown(0.3);
+      doc.fontSize(11).fillColor("#DC2626").font("Helvetica-Bold").text(
+        `ORDER CANCELLED${order.cancelledAt ? ` — ${order.cancelledAt.toDateString()}` : ""}`,
+      );
+      doc.font("Helvetica").fillColor("#000");
+    }
     doc.moveDown();
 
     doc.fontSize(11).text("Bill To / Ship To", { underline: true });

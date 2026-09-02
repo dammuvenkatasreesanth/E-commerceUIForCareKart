@@ -1,4 +1,5 @@
 import { api, apiFetchBlob, buildQuery } from "../../client";
+import { uploadFormData } from "../../uploadWithProgress";
 import type { AdminProduct, AdminProductInput, AdminCategory, Paginated } from "../../../../types/admin";
 
 export interface AdminProductListQuery {
@@ -33,10 +34,10 @@ export function setBoxSizes(id: number, boxSizes: NonNullable<AdminProductInput[
   return api.put(`/admin/products/${id}/box-sizes`, { boxSizes });
 }
 
-export function addProductImage(id: number, file: File): Promise<{ id: number; url: string; sortOrder: number }> {
+export function addProductImage(id: number, file: File, onProgress?: (percent: number) => void): Promise<{ id: number; url: string; sortOrder: number }> {
   const form = new FormData();
   form.append("image", file);
-  return api.postForm(`/admin/products/${id}/images`, form);
+  return uploadFormData(`/admin/products/${id}/images`, form, onProgress);
 }
 
 export function removeProductImage(id: number, imageId: number): Promise<void> {
@@ -45,10 +46,10 @@ export function removeProductImage(id: number, imageId: number): Promise<void> {
 
 // Uploads only — the caller PATCHes the returned url onto the product's
 // videoUrl separately (mirrors the banner/category image upload flow).
-export function uploadProductVideo(id: number, file: File): Promise<{ url: string }> {
+export function uploadProductVideo(id: number, file: File, onProgress?: (percent: number) => void): Promise<{ url: string }> {
   const form = new FormData();
   form.append("video", file);
-  return api.postForm(`/admin/products/${id}/video`, form);
+  return uploadFormData(`/admin/products/${id}/video`, form, onProgress);
 }
 
 export function importProductsCsv(file: File): Promise<{ created: number; updated: number; errors: string[] }> {
@@ -77,8 +78,8 @@ export function deleteCategory(id: number): Promise<void> {
   return api.delete(`/admin/categories/${id}`);
 }
 
-export function uploadCategoryImage(file: File): Promise<{ url: string }> {
+export function uploadCategoryImage(file: File, onProgress?: (percent: number) => void): Promise<{ url: string }> {
   const form = new FormData();
   form.append("image", file);
-  return api.postForm("/admin/categories/upload-image", form);
+  return uploadFormData("/admin/categories/upload-image", form, onProgress);
 }

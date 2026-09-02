@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, ImagePlus } from "lucide-react";
+import { UploadProgressBar } from "../../../components/common/UploadProgressBar";
 import { DataTable, type DataTableColumn } from "../../../components/common/DataTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
@@ -272,6 +273,7 @@ function BannersTab() {
   const [form, setForm] = useState<BannerInput>(emptyBannerForm());
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const openCreate = () => {
     setEditing(null);
@@ -303,14 +305,16 @@ function BannersTab() {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
+    setUploadProgress(0);
     try {
-      const { url } = await uploadImage.mutateAsync(file);
+      const { url } = await uploadImage.mutateAsync({ file, onProgress: setUploadProgress });
       setForm((f) => ({ ...f, imageUrl: url }));
       toast.success("Image uploaded");
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
       e.target.value = "";
     }
   };
@@ -466,10 +470,13 @@ function BannersTab() {
               <label className="block text-xs font-semibold mb-1">Image</label>
               <div className="flex items-center gap-3">
                 {form.imageUrl && <img src={form.imageUrl} alt="" className="w-14 h-14 rounded-lg object-cover bg-muted flex-shrink-0" />}
-                <label className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs font-semibold cursor-pointer">
-                  <ImagePlus className="w-3.5 h-3.5" />{isUploading ? "Uploading…" : "Upload Image"}
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
-                </label>
+                <div className="flex-1 min-w-0">
+                  <label className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs font-semibold cursor-pointer w-fit">
+                    <ImagePlus className="w-3.5 h-3.5" />{isUploading ? `Uploading… ${uploadProgress ?? 0}%` : "Upload Image"}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
+                  </label>
+                  {uploadProgress !== null && <UploadProgressBar percent={uploadProgress} />}
+                </div>
               </div>
             </div>
           </div>

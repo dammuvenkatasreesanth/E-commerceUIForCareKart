@@ -37,10 +37,13 @@ export const uploadCategoryImage = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
+// 50MB was rejecting ordinary phone-recorded product videos outright (a few
+// seconds of 1080p/4K footage clears that easily) — raised to a size real
+// clips fit in, while still bounding request size.
 export const uploadProductVideo = multer({
   storage: multer.memoryStorage(),
   fileFilter: videoFileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 },
 });
 
 export const uploadCsv = multer({

@@ -45,7 +45,7 @@ export function useDeleteBanner() {
   return useMutation({ mutationFn: (id: number) => api.deleteBanner(id), onSuccess: () => queryClient.invalidateQueries({ queryKey: BANNERS_KEY }) });
 }
 export function useUploadBannerImage() {
-  return useMutation({ mutationFn: (file: File) => api.uploadBannerImage(file) });
+  return useMutation({ mutationFn: ({ file, onProgress }: { file: File; onProgress?: (percent: number) => void }) => api.uploadBannerImage(file, onProgress) });
 }
 
 export function useContentPages() {

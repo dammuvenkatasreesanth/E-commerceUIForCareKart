@@ -5,6 +5,7 @@ import { MobileBottomNav } from "../components/common/MobileBottomNav";
 import { useLegacyStore } from "../context/LegacyStoreContext";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../hooks/useCart";
+import { useScrollToTop } from "../hooks/useScrollToTop";
 
 // These pages render their own full-screen AuthLayout shell (own logo, own
 // "Back to store" link, own footer) — the site Header/MobileBottomNav is
@@ -12,6 +13,7 @@ import { useCart } from "../hooks/useCart";
 const BARE_AUTH_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/verify-email"];
 
 export function CustomerLayout() {
+  useScrollToTop();
   const { searchQuery, setSearchQuery } = useLegacyStore();
   const { status, user } = useAuth();
   const { data: cartData } = useCart();

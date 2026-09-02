@@ -26,3 +26,8 @@ export async function listBanners(_req: Request, res: Response) {
   const banners = await catalogService.listActiveBanners();
   res.json(banners);
 }
+
+export async function lookupPincode(req: Request, res: Response) {
+  const result = await catalogService.lookupPincode(req.params.pincode);
+  res.json(result);
+}

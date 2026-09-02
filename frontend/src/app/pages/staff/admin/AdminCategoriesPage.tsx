@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Home } from "lucide-react";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
+import { UploadProgressBar } from "../../../components/common/UploadProgressBar";
 import { useAdminCategories, useCreateCategory, useUpdateCategory, useDeleteCategory, useUploadCategoryImage } from "../../../hooks/admin/useAdminCatalog";
 import type { AdminCategory } from "../../../types/admin";
 
@@ -32,6 +33,7 @@ export function AdminCategoriesPage() {
   const [form, setForm] = useState<CategoryForm>(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const openCreate = () => {
     setEditing(null);
@@ -55,14 +57,16 @@ export function AdminCategoriesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
+    setUploadProgress(0);
     try {
-      const { url } = await uploadImage.mutateAsync(file);
+      const { url } = await uploadImage.mutateAsync({ file, onProgress: setUploadProgress });
       setForm((f) => ({ ...f, imageUrl: url }));
       toast.success("Image uploaded");
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
       e.target.value = "";
     }
   };
@@ -174,10 +178,13 @@ export function AdminCategoriesPage() {
               <label className="block text-xs font-semibold mb-1">Image</label>
               <div className="flex items-center gap-3">
                 {form.imageUrl && <ImageWithFallback src={form.imageUrl} alt="" className="w-14 h-14 rounded-xl object-cover border border-border flex-shrink-0" />}
-                <label className={`flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs font-semibold cursor-pointer ${isUploading ? "opacity-50 pointer-events-none" : ""}`}>
-                  {isUploading ? "Uploading…" : form.imageUrl ? "Replace Image" : "Upload Image"}
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                </label>
+                <div className="flex-1 min-w-0">
+                  <label className={`flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs font-semibold cursor-pointer w-fit ${isUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                    {isUploading ? `Uploading… ${uploadProgress ?? 0}%` : form.imageUrl ? "Replace Image" : "Upload Image"}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  </label>
+                  {uploadProgress !== null && <UploadProgressBar percent={uploadProgress} />}
+                </div>
               </div>
             </div>
             <div>

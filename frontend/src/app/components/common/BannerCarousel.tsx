@@ -34,6 +34,21 @@ const LEGACY_PAGE_TO_PATH: Record<string, string> = {
   login: "/login",
 };
 
+// Admins now type real paths ("/products") or full URLs (a catalogue PDF,
+// an external page) straight into the CTA link fields — the legacy-key
+// lookup above only covers banners seeded before that admin UI existed.
+// A link that isn't one of those old keys is used as-is; a full http(s)
+// URL opens in a new tab instead of trying to client-side-route to it.
+function goToLink(navigate: ReturnType<typeof useNavigate>, link: string | null | undefined) {
+  if (!link) return;
+  const target = LEGACY_PAGE_TO_PATH[link] ?? link;
+  if (/^https?:\/\//i.test(target)) {
+    window.open(target, "_blank", "noopener,noreferrer");
+    return;
+  }
+  navigate(target.startsWith("/") ? target : `/${target}`);
+}
+
 export function BannerCarousel({ banners }: { banners: Banner[] }) {
   const navigate = useNavigate();
   const active = banners.filter(b => b.active);
@@ -64,8 +79,8 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
           {b.subheadline && <h2 className="text-2xl md:text-4xl font-extrabold leading-tight font-['Plus_Jakarta_Sans'] text-white/80 mb-3">{b.subheadline}</h2>}
           <p className="text-white/80 text-sm md:text-base mb-6 max-w-md">{b.subtext}</p>
           <div className="flex flex-wrap gap-3">
-            <button onClick={() => navigate(LEGACY_PAGE_TO_PATH[b.ctaPrimaryLink] ?? "/")} className="px-5 py-2.5 bg-white text-primary font-bold rounded-xl text-sm hover:bg-opacity-90 transition-colors">{b.ctaPrimary}</button>
-            {b.ctaSecondary && <button className="px-5 py-2.5 bg-white/15 border border-white/30 text-white font-semibold rounded-xl text-sm hover:bg-white/20 transition-colors">{b.ctaSecondary}</button>}
+            <button onClick={() => goToLink(navigate, b.ctaPrimaryLink)} className="px-5 py-2.5 bg-white text-primary font-bold rounded-xl text-sm hover:bg-opacity-90 transition-colors">{b.ctaPrimary}</button>
+            {b.ctaSecondary && <button onClick={() => goToLink(navigate, b.ctaSecondaryLink)} className="px-5 py-2.5 bg-white/15 border border-white/30 text-white font-semibold rounded-xl text-sm hover:bg-white/20 transition-colors">{b.ctaSecondary}</button>}
           </div>
         </div>
         {b.imageUrl && <div className="hidden sm:block absolute right-0 top-0 bottom-0 w-64 md:w-96"><img src={b.imageUrl as string} alt="" className="w-full h-full object-cover opacity-25 md:opacity-35" /></div>}

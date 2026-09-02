@@ -3,6 +3,8 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, MapPin, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAddresses, useCreateAddress, useDeleteAddress, useSetDefaultAddress } from "../../../hooks/useAddresses";
+import { usePincodeAutofill } from "../../../hooks/usePincodeAutofill";
+import { isValidPhone, isValidPincode, mapsUrlForAddress } from "../../../lib/addressValidation";
 
 export function AddressesPage() {
   const navigate = useNavigate();
@@ -11,7 +13,15 @@ export function AddressesPage() {
   const deleteAddress = useDeleteAddress();
   const setDefaultAddress = useSetDefaultAddress();
   const [showAddAddr, setShowAddAddr] = useState(false);
-  const [newAddr, setNewAddr] = useState({ label: "Home", name: "", line1: "", city: "", state: "", pin: "", phone: "" });
+  const [newAddr, setNewAddr] = useState({ label: "Home", name: "", line1: "", pin: "", city: "", state: "", phone: "" });
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const { isLoading: isLookingUpPincode } = usePincodeAutofill(newAddr.pin, (city, state) => {
+    setNewAddr((a) => ({ ...a, city, state }));
+  });
+
+  const phoneValid = newAddr.phone === "" || isValidPhone(newAddr.phone);
+  const pincodeValid = newAddr.pin === "" || isValidPincode(newAddr.pin);
 
   const handleSetDefault = (id: number) => {
     setDefaultAddress.mutate(id, {
@@ -26,7 +36,10 @@ export function AddressesPage() {
   };
 
   const handleSave = () => {
+    setTouched({ name: true, line1: true, pin: true, phone: true });
     if (!newAddr.name || !newAddr.line1) return;
+    if (!isValidPincode(newAddr.pin)) { toast.error("Enter a valid 6-digit pincode"); return; }
+    if (!isValidPhone(newAddr.phone)) { toast.error("Enter a valid 10-digit mobile number"); return; }
     createAddress.mutate(
       {
         label: newAddr.label,
@@ -40,7 +53,8 @@ export function AddressesPage() {
       {
         onSuccess: () => {
           toast.success("Address saved");
-          setNewAddr({ label: "Home", name: "", line1: "", city: "", state: "", pin: "", phone: "" });
+          setNewAddr({ label: "Home", name: "", line1: "", pin: "", city: "", state: "", phone: "" });
+          setTouched({});
           setShowAddAddr(false);
         },
         onError: (err: Error) => toast.error(err.message),
@@ -74,6 +88,14 @@ export function AddressesPage() {
               <p className="text-xs text-muted-foreground mt-0.5">{addr.line1}</p>
               <p className="text-xs text-muted-foreground">{addr.city}, {addr.state} — {addr.pincode}</p>
               <p className="text-xs text-muted-foreground mt-0.5">📞 +91 {addr.phone}</p>
+              <a
+                href={mapsUrlForAddress(addr)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+              >
+                <MapPin className="w-3 h-3" />View on map
+              </a>
             </div>
           ))}
           {(addresses ?? []).length === 0 && <div className="text-center py-10 text-muted-foreground bg-white border border-border rounded-2xl"><MapPin className="w-10 h-10 mx-auto mb-2 text-border" /><p>No saved addresses</p></div>}
@@ -87,9 +109,51 @@ export function AddressesPage() {
             <div className="flex gap-2">
               {["Home", "Office", "Other"].map(l => <button key={l} onClick={() => setNewAddr(a => ({ ...a, label: l }))} className={`px-3 py-1.5 text-xs font-semibold rounded-xl border-2 transition-all ${newAddr.label === l ? "border-primary bg-primary/5 text-primary" : "border-border"}`}>{l}</button>)}
             </div>
-            {[{ k: "name", label: "Full Name", ph: "Recipient name" }, { k: "line1", label: "Address", ph: "Flat, Street, Area" }, { k: "city", label: "City", ph: "Mumbai" }, { k: "state", label: "State", ph: "Maharashtra" }, { k: "pin", label: "PIN Code", ph: "400001" }, { k: "phone", label: "Phone", ph: "9876543210" }].map(f => (
-              <div key={f.k}><label className="block text-xs font-semibold mb-1">{f.label}</label><input value={(newAddr as Record<string, string>)[f.k]} onChange={e => setNewAddr(a => ({ ...a, [f.k]: e.target.value }))} placeholder={f.ph} className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" /></div>
-            ))}
+            <div>
+              <label className="block text-xs font-semibold mb-1">Full Name</label>
+              <input value={newAddr.name} onChange={e => setNewAddr(a => ({ ...a, name: e.target.value }))} placeholder="Recipient name" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">PIN Code</label>
+              <div className="relative">
+                <input
+                  value={newAddr.pin}
+                  onChange={e => setNewAddr(a => ({ ...a, pin: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                  onBlur={() => setTouched(t => ({ ...t, pin: true }))}
+                  placeholder="400001"
+                  inputMode="numeric"
+                  className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.pin && !pincodeValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
+                />
+                {isLookingUpPincode && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">Looking up…</span>}
+              </div>
+              {touched.pin && !pincodeValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 6-digit pincode</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold mb-1">City</label>
+                <input value={newAddr.city} onChange={e => setNewAddr(a => ({ ...a, city: e.target.value }))} placeholder="Mumbai" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">State</label>
+                <input value={newAddr.state} onChange={e => setNewAddr(a => ({ ...a, state: e.target.value }))} placeholder="Maharashtra" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">Address</label>
+              <input value={newAddr.line1} onChange={e => setNewAddr(a => ({ ...a, line1: e.target.value }))} placeholder="Flat, Street, Area" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">Phone</label>
+              <input
+                value={newAddr.phone}
+                onChange={e => setNewAddr(a => ({ ...a, phone: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
+                onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                placeholder="9876543210"
+                inputMode="numeric"
+                className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.phone && !phoneValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
+              />
+              {touched.phone && !phoneValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 10-digit mobile number</p>}
+            </div>
           </div>
           <div className="flex gap-2 mt-4">
             <button onClick={handleSave} disabled={createAddress.isPending} className="flex-1 py-2.5 bg-primary text-white text-sm font-bold rounded-xl disabled:opacity-40">{createAddress.isPending ? "Saving..." : "Save Address"}</button>

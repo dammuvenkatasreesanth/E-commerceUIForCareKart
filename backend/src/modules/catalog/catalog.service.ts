@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or, type SQL } from "drizzle-orm";
+import axios from "axios";
 import { db } from "../../db";
 import { banners, categories, productImages, productSizes, products, reviews, users } from "../../db/schema";
 import { NotFoundError } from "../../lib/errors";
@@ -128,4 +129,25 @@ export async function listActiveBanners() {
     ),
     orderBy: [asc(banners.sortOrder)],
   });
+}
+
+interface PostOfficeResult {
+  Status: string;
+  PostOffice: { District: string; State: string; Name: string }[] | null;
+}
+
+// Proxied server-side rather than called directly from the browser: the
+// India Post API's CORS support is inconsistent, and this also lets us hide
+// its failure modes (timeouts, non-2xx) behind one clean "not found" result
+// instead of leaking a third-party outage into the address form.
+export async function lookupPincode(pincode: string): Promise<{ city: string; state: string } | null> {
+  try {
+    const { data } = await axios.get<PostOfficeResult[]>(`https://api.postalpincode.in/pincode/${pincode}`, { timeout: 5000 });
+    const result = data[0];
+    const office = result?.Status === "Success" ? result.PostOffice?.[0] : null;
+    if (!office) return null;
+    return { city: office.District, state: office.State };
+  } catch {
+    return null;
+  }
 }
