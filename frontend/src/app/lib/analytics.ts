@@ -6,6 +6,18 @@
 // the bare gtag.js snippet only counts the very first page load otherwise.
 const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined;
 
+// This GA4 property is linked under a Google Tag container (Tag Assistant
+// shows Tag IDs "G-68FKLXZ8LS, GT-PHCDKRLS" as one linked tag — a GT- id is
+// created automatically when a GA4 property gets linked to something else,
+// Google Ads account linking being the usual cause). Once that link exists,
+// Google's own recommended install changes: the gtag.js *script* has to be
+// loaded with the container's GT- id, not the bare G- measurement id — the
+// destination is still configured with the G- id via gtag('config', ...)
+// below. Loading the script with the bare G- id (what this used to do) is
+// why Tag Assistant reported "Deferred hits… no hits were sent by this tag"
+// despite everything else (consent, config, events) executing correctly.
+const GTM_CONTAINER_ID = "GT-PHCDKRLS";
+
 declare global {
   interface Window {
     dataLayer?: unknown[];
@@ -32,7 +44,7 @@ export function initAnalytics(): void {
 
   const script = document.createElement("script");
   script.async = true;
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${GTM_CONTAINER_ID}`;
   document.head.appendChild(script);
 
   // Since 2024, gtag.js defaults analytics_storage to "denied" until told
