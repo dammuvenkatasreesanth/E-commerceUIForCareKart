@@ -436,17 +436,25 @@ async function seedAdmin() {
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? "ChangeMe123!";
   const name = process.env.BOOTSTRAP_ADMIN_NAME ?? "CareKart Admin";
 
+  // Check for an existing admin BEFORE the default-password guard below —
+  // otherwise a production .env that never touched BOOTSTRAP_ADMIN_PASSWORD
+  // after initial setup (the admin account already exists and was never
+  // going to be recreated anyway) hard-exits the whole script here, silently
+  // skipping every seed step after this one — seedCatalog/seedCoupons/
+  // seedContentPages never even run. That's exactly what happened to the
+  // content pages: the admin account already existed, but this check ran
+  // first and aborted before reaching seedContentPages().
+  const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
+  if (existing) {
+    console.log(`Bootstrap admin already exists: ${email}`);
+    return;
+  }
+
   if (process.env.NODE_ENV === "production" && password === "ChangeMe123!") {
     console.error(
       "Refusing to seed: BOOTSTRAP_ADMIN_PASSWORD is still the default value in production. Set a real password before seeding.",
     );
     process.exit(1);
-  }
-
-  const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
-  if (existing) {
-    console.log(`Bootstrap admin already exists: ${email}`);
-    return;
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
