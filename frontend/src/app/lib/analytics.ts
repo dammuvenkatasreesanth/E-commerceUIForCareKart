@@ -9,6 +9,7 @@ const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string | und
 declare global {
   interface Window {
     dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
   }
 }
 
@@ -23,6 +24,12 @@ export function initAnalytics(): void {
   initialized = true;
 
   window.dataLayer = window.dataLayer || [];
+  // Exposed globally to exactly match Google's own official snippet (and so
+  // any external tooling — the GA4 tag-health checks included — that looks
+  // for window.gtag specifically finds it), even though our own code here
+  // only ever calls the local gtag() above.
+  window.gtag = gtag;
+
   const script = document.createElement("script");
   script.async = true;
   script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
@@ -32,11 +39,23 @@ export function initAnalytics(): void {
   // otherwise (Google's Consent Mode) — without this, the script loads and
   // initializes normally but silently withholds every actual event, which
   // is indistinguishable from a broken integration when you're just
-  // checking "did the script load". This site has no cookie-consent
-  // banner gating anything, so there's no real consent state to wait on —
-  // grant analytics outright; ad_storage stays denied since nothing here
-  // does ad targeting.
-  gtag("consent", "default", { analytics_storage: "granted", ad_storage: "denied" });
+  // checking "did the script load". This site has no cookie-consent banner
+  // gating anything, so there's no real consent state to wait on — grant
+  // analytics outright.
+  //
+  // All FOUR Consent Mode v2 categories are set explicitly, not just the
+  // two analytics-relevant ones — if Google Signals / Ads linking is
+  // enabled on the property, an incomplete v2 signal (missing
+  // ad_user_data/ad_personalization) can make the tag treat consent as not
+  // properly configured and withhold hits entirely, which matches exactly
+  // what was observed: the tag loads and processes events internally but
+  // never actually sends one.
+  gtag("consent", "default", {
+    analytics_storage: "granted",
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
   gtag("js", new Date());
   gtag("config", GA_MEASUREMENT_ID, { send_page_view: false });
 }
