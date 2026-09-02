@@ -67,6 +67,8 @@ export interface ProductReview {
 
 export interface ProductDetail extends ProductSummary {
   reviews: ProductReview[];
+  /** Count of APPROVED reviews per star (1-5), across ALL reviews — not just the `reviews` list above, which is capped at the latest 10. */
+  ratingBreakdown: Record<number, number>;
 }
 
 export interface ProductListResponse {

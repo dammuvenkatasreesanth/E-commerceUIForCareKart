@@ -286,7 +286,7 @@ export function ProductDetailPage() {
             <div>
               <div className="flex flex-col md:flex-row gap-6 mb-6 pb-6 border-b border-border">
                 <div className="text-center"><p className="text-5xl font-extrabold">{product.ratingAvg}</p><Stars rating={Number(product.ratingAvg)} /><p className="text-xs text-muted-foreground mt-1">{product.ratingCount.toLocaleString()} ratings</p></div>
-                <div className="flex-1 space-y-1.5">{[5,4,3,2,1].map((s, i) => { const pcts = [72,18,6,2,2]; return <div key={s} className="flex items-center gap-2"><span className="text-xs text-muted-foreground w-8 text-right">{s}★</span><div className="flex-1 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-yellow-400 rounded-full" style={{ width: `${pcts[i]}%` }} /></div><span className="text-xs text-muted-foreground w-6">{pcts[i]}%</span></div>; })}</div>
+                <div className="flex-1 space-y-1.5">{[5,4,3,2,1].map((s) => { const starCount = product.ratingBreakdown[s] ?? 0; const pct = product.ratingCount > 0 ? Math.round((starCount / product.ratingCount) * 100) : 0; return <div key={s} className="flex items-center gap-2"><span className="text-xs text-muted-foreground w-8 text-right">{s}★</span><div className="flex-1 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-yellow-400 rounded-full" style={{ width: `${pct}%` }} /></div><span className="text-xs text-muted-foreground w-6">{pct}%</span></div>; })}</div>
               </div>
               {product.reviews.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No reviews yet.</p>

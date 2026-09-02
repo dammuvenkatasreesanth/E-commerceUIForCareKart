@@ -87,9 +87,22 @@ export async function getProductBySlug(slug: string) {
     .where(inArray(users.id, [...new Set(reviewRows.map((r) => r.userId))]));
   const userNameById = indexBy(reviewUsers, (u) => u.id);
 
+  // A real per-star breakdown, not derived from `reviews` above — that list
+  // is capped at the latest 10, which would under-count star buckets (or
+  // show a distribution at all with zero real reviews) for any product with
+  // more approved reviews than that.
+  const breakdownRows = await db
+    .select({ rating: reviews.rating, value: count() })
+    .from(reviews)
+    .where(and(eq(reviews.productId, row.id), eq(reviews.status, "APPROVED")))
+    .groupBy(reviews.rating);
+  const ratingBreakdown: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  for (const r of breakdownRows) ratingBreakdown[r.rating] = r.value;
+
   return {
     ...product,
     reviews: reviewRows.map((r) => ({ ...r, user: { name: userNameById.get(r.userId)?.name ?? null } })),
+    ratingBreakdown,
   };
 }
 
