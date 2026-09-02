@@ -8,6 +8,7 @@ import { Logo } from "../Logo";
 const FOOTER_LINK_HREFS: Record<string, string> = {
   "About Us": "/about-us",
   "Returns & Refunds": "/cancellation-refund-policy",
+  "Shipping Policy": "/shipping-delivery-policy",
 };
 
 // Rendered once by CustomerLayout so every customer-facing page gets it, not
@@ -34,7 +35,7 @@ export function Footer() {
           {[
             { title: "Products", links: ["Nitrile Gloves", "Latex Gloves", "Vinyl Gloves", "N95 Masks", "Face Shields", "PPE Kits", "Sanitizers", "Lab Coats"] },
             { title: "Company", links: ["About Us", "Careers", "Press / Media", "Certifications", "CSR Initiatives", "Partner with Us"] },
-            { title: "Support", links: ["Help Centre", "Track My Order", "Returns & Refunds", "Bulk Enquiry", "GST Invoice Help", "Contact Us"] },
+            { title: "Support", links: ["Help Centre", "Track My Order", "Shipping Policy", "Returns & Refunds", "Bulk Enquiry", "GST Invoice Help", "Contact Us"] },
           ].map(col => (
             <div key={col.title}>
               <p className="font-bold text-sm mb-3">{col.title}</p>
