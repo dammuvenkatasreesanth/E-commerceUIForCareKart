@@ -26,6 +26,10 @@ export function updateAdminProduct(id: number, input: Partial<AdminProductInput>
   return api.patch(`/admin/products/${id}`, input);
 }
 
+export function deleteAdminProduct(id: number): Promise<void> {
+  return api.delete(`/admin/products/${id}`);
+}
+
 export function setPackTiers(id: number, tiers: NonNullable<AdminProductInput["packTiers"]>): Promise<AdminProduct> {
   return api.put(`/admin/products/${id}/pack-tiers`, { tiers });
 }

@@ -16,6 +16,7 @@ import {
   useAddProductImage,
   useRemoveProductImage,
   useUploadProductVideo,
+  useDeleteProduct,
 } from "../../../hooks/admin/useAdminCatalog";
 import { exportProductsCsv } from "../../../lib/api/endpoints/admin/catalog";
 import { downloadBlob } from "../../../lib/download";
@@ -80,6 +81,7 @@ export function AdminProductsListPage() {
   const addProductImage = useAddProductImage();
   const removeProductImage = useRemoveProductImage();
   const uploadProductVideo = useUploadProductVideo();
+  const deleteProduct = useDeleteProduct();
 
   const [editing, setEditing] = useState<AdminProduct | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -250,6 +252,16 @@ export function AdminProductsListPage() {
     e.target.value = "";
   };
 
+  const handleDelete = async (p: AdminProduct) => {
+    if (!window.confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteProduct.mutateAsync(p.id);
+      toast.success("Product deleted");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
   const handleExport = async () => {
     try {
       const blob = await exportProductsCsv();
@@ -337,7 +349,10 @@ export function AdminProductsListPage() {
         }
         pagination={data ? { page: data.page, totalPages: data.totalPages, total: data.total, limit: data.limit, onPageChange: setPage } : undefined}
         rowActions={(p) => (
-          <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+            <button onClick={() => handleDelete(p)} className="p-1.5 hover:bg-red-50 rounded-lg text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
         )}
       />
 

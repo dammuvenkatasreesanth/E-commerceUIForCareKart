@@ -2,7 +2,7 @@ import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import { and, asc, count, eq, inArray, like, type SQL } from "drizzle-orm";
 import { db } from "../../db";
-import { categories, packPriceTiers, productImages, productSizes, products, shippingBoxSizes } from "../../db/schema";
+import { cartItems, categories, orderItems, packPriceTiers, productImages, productSizes, products, reviews, shippingBoxSizes, wishlistItems } from "../../db/schema";
 import { slugify } from "../../lib/slugify";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
 import { attachProductRelations } from "../../lib/productRelations";
@@ -198,6 +198,36 @@ export async function updateProduct(id: number, input: Partial<ProductInput> & {
   }
 
   return getProduct(id);
+}
+
+// A hard delete rather than the isActive toggle already exposed elsewhere —
+// for genuinely removing junk/test products, not for hiding real ones.
+// Blocked once a product has real order history: OrderItem denormalizes
+// everything it needs (name, price, gst, ...) and keeps a nullable
+// productId with no DB-level FK, so the order itself wouldn't break, but
+// silently detaching real sales history from its product on every delete
+// would be a bad default — an admin retiring a product that's actually been
+// sold should deactivate it (isActive: false) instead, keeping the record
+// intact and reversible.
+export async function deleteProduct(id: number) {
+  const existing = await db.query.products.findFirst({ where: eq(products.id, id) });
+  if (!existing) throw new NotFoundError("Product not found");
+
+  const [{ value: orderCount }] = await db.select({ value: count() }).from(orderItems).where(eq(orderItems.productId, id));
+  if (orderCount > 0) {
+    throw new BadRequestError("Cannot delete a product that has been ordered. Deactivate it instead to keep order history intact.");
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(productImages).where(eq(productImages.productId, id));
+    await tx.delete(productSizes).where(eq(productSizes.productId, id));
+    await tx.delete(packPriceTiers).where(eq(packPriceTiers.productId, id));
+    await tx.delete(shippingBoxSizes).where(eq(shippingBoxSizes.productId, id));
+    await tx.delete(cartItems).where(eq(cartItems.productId, id));
+    await tx.delete(wishlistItems).where(eq(wishlistItems.productId, id));
+    await tx.delete(reviews).where(eq(reviews.productId, id));
+    await tx.delete(products).where(eq(products.id, id));
+  });
 }
 
 export async function setPackTiers(id: number, tiers: PackTierInput[]) {

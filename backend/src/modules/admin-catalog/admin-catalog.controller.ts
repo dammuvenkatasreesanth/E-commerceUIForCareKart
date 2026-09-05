@@ -27,6 +27,13 @@ export async function updateProduct(req: Request, res: Response) {
   res.json(product);
 }
 
+export async function deleteProduct(req: Request, res: Response) {
+  const id = parseIdParam(req.params.id);
+  await service.deleteProduct(id);
+  await writeAudit({ actorId: req.user!.id, action: "product.delete", entityType: "Product", entityId: id, ipAddress: req.ip });
+  res.status(204).send();
+}
+
 export async function setPackTiers(req: Request, res: Response) {
   const id = parseIdParam(req.params.id);
   const product = await service.setPackTiers(id, req.body.tiers);

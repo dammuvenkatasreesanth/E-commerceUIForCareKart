@@ -29,6 +29,14 @@ export function useUpdateProduct() {
   });
 }
 
+export function useDeleteProduct() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteAdminProduct(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY }),
+  });
+}
+
 export function useSetPackTiers() {
   const queryClient = useQueryClient();
   return useMutation({
