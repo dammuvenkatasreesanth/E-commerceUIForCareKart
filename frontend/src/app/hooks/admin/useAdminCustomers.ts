@@ -11,6 +11,14 @@ export function useAdminCustomer(id: number | undefined) {
   return useQuery({ queryKey: [...CUSTOMERS_KEY, id], queryFn: () => api.getCustomer(id as number), enabled: !!id });
 }
 
+export function useUpdateCustomer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: number; input: api.UpdateCustomerInput }) => api.updateCustomer(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY }),
+  });
+}
+
 export function useDecideGstApproval() {
   const queryClient = useQueryClient();
   return useMutation({

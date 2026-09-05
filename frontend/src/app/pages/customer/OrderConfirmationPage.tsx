@@ -15,13 +15,24 @@ export function OrderConfirmationPage() {
   }
 
   if (!order) {
+    // A bare "?status=error" with no orderId at all means the payment
+    // provider's redirect itself was malformed or reconciliation failed —
+    // there's no order to show, but the cart (untouched, since only a
+    // successful payment ever clears it) still has the customer's items,
+    // so a plain "couldn't find that order" dead-end isn't the honest
+    // message here; offer the same retry path as a known failed payment.
+    const noOrderId = !searchParams.get("orderId");
     return (
       <div className="max-w-xl mx-auto px-4 py-12 text-center pb-24 md:pb-12">
         <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
           <XCircle className="w-10 h-10 text-destructive" />
         </div>
-        <h1 className="text-2xl font-extrabold font-['Plus_Jakarta_Sans'] mb-2">We couldn't find that order</h1>
-        <button onClick={() => navigate("/account/orders")} className="px-6 py-3 bg-primary text-white font-bold rounded-2xl">View My Orders</button>
+        <h1 className="text-2xl font-extrabold font-['Plus_Jakarta_Sans'] mb-2">{noOrderId ? "Something went wrong" : "We couldn't find that order"}</h1>
+        {noOrderId && <p className="text-muted-foreground text-sm mb-6">We couldn't confirm your payment status. Your cart is untouched — try again, or check your orders to see if it went through.</p>}
+        <div className="flex gap-3">
+          {noOrderId && <button onClick={() => navigate("/checkout")} className="flex-1 py-3 border-2 border-primary text-primary font-bold rounded-2xl">Try Again</button>}
+          <button onClick={() => navigate("/account/orders")} className="flex-1 py-3 bg-primary text-white font-bold rounded-2xl">View My Orders</button>
+        </div>
       </div>
     );
   }
@@ -64,10 +75,22 @@ export function OrderConfirmationPage() {
           <span>₹{total.toLocaleString()}</span>
         </div>
       </div>
-      <div className="flex gap-3">
-        <button onClick={() => navigate(`/account/orders/${order.id}`)} className="flex-1 py-3 border-2 border-primary text-primary font-bold rounded-2xl">Track Order</button>
-        <button onClick={() => navigate("/")} className="flex-1 py-3 bg-primary text-white font-bold rounded-2xl">Continue Shopping</button>
-      </div>
+      {failedPayment ? (
+        <div className="flex gap-3">
+          {/* The cart survives a failed/cancelled payment (only a successful
+              one clears it — see payments.service.ts), so the same items
+              are still there to check out again. */}
+          <button onClick={() => navigate("/checkout")} className="flex-1 py-3 border-2 border-primary text-primary font-bold rounded-2xl">Try Again</button>
+          <button onClick={() => navigate("/cart")} className="flex-1 py-3 bg-primary text-white font-bold rounded-2xl">Continue Shopping</button>
+        </div>
+      ) : (
+        <div className="flex gap-3">
+          <button onClick={() => navigate(`/account/orders/${order.id}`)} className="flex-1 py-3 border-2 border-primary text-primary font-bold rounded-2xl">Track Order</button>
+          {/* Cart is empty at this point (a successful payment is what
+              clears it) — back to the shop, not to an empty cart page. */}
+          <button onClick={() => navigate("/")} className="flex-1 py-3 bg-primary text-white font-bold rounded-2xl">Continue Shopping</button>
+        </div>
+      )}
     </div>
   );
 }

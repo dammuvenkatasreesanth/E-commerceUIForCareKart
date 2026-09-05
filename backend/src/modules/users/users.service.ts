@@ -10,7 +10,7 @@ export async function getProfile(userId: number) {
   return user;
 }
 
-interface UpdateProfileInput {
+export interface UpdateProfileInput {
   name?: string;
   email?: string;
   phone?: string;

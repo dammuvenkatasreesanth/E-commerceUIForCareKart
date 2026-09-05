@@ -177,8 +177,14 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
       await tx.update(coupons).set({ usedCount: sql`${coupons.usedCount} + 1` }).where(eq(coupons.id, couponId));
     }
 
-    // Buy Now never touched the real cart, so there's nothing to clear.
-    if (!input.buyNow) {
+    // Buy Now never touched the real cart, so there's nothing to clear. For
+    // an online-payment order, the cart must survive until payment actually
+    // succeeds (see payments.service.ts's applyPaymentResult) — this order
+    // is only PENDING right now, and clearing the cart here would strand a
+    // customer whose payment fails or who cancels on PhonePe's page with an
+    // empty cart despite never having actually paid. COD orders are already
+    // CONFIRMED at this point, so clearing immediately is correct for them.
+    if (!input.buyNow && isCod) {
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
     }
 

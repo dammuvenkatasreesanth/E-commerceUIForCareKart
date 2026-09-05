@@ -1,15 +1,26 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { MapPin, Star } from "lucide-react";
+import { MapPin, Star, Pencil } from "lucide-react";
 import { StatusBadge } from "../../../components/common/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../../components/ui/dialog";
-import { useAdminCustomer, useDecideGstApproval, useSetCustomerStatus } from "../../../hooks/admin/useAdminCustomers";
-import type { StaffStatus } from "../../../types/admin";
+import { useAdminCustomer, useDecideGstApproval, useSetCustomerStatus, useUpdateCustomer } from "../../../hooks/admin/useAdminCustomers";
+import type { StaffStatus, AdminCustomerDetail } from "../../../types/admin";
+import type { AccountType } from "../../../types/user";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
 }
+
+type EditForm = { name: string; email: string; phone: string; accountType: AccountType; gstin: string };
+
+const formFromCustomer = (c: AdminCustomerDetail): EditForm => ({
+  name: c.name ?? "",
+  email: c.email ?? "",
+  phone: c.phone ?? "",
+  accountType: c.accountType,
+  gstin: c.gstin ?? "",
+});
 
 export function AdminCustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,12 +29,52 @@ export function AdminCustomerDetailPage() {
   const { data: customer, isLoading } = useAdminCustomer(customerId);
   const decideGstApproval = useDecideGstApproval();
   const setCustomerStatus = useSetCustomerStatus();
+  const updateCustomer = useUpdateCustomer();
 
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
   const [statusDialog, setStatusDialog] = useState<StaffStatus | null>(null);
   const [statusReason, setStatusReason] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+
+  const openEdit = () => {
+    if (!customer) return;
+    setEditForm(formFromCustomer(customer));
+    setShowEditDialog(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm) return;
+    if (!editForm.name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    if (editForm.accountType === "BUSINESS" && !editForm.gstin.trim()) {
+      toast.error("GSTIN is required for a business account");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateCustomer.mutateAsync({
+        id: customerId,
+        input: {
+          name: editForm.name.trim(),
+          email: editForm.email.trim() || undefined,
+          phone: editForm.phone.trim() || undefined,
+          accountType: editForm.accountType,
+          gstin: editForm.accountType === "BUSINESS" ? editForm.gstin.trim() : undefined,
+        },
+      });
+      toast.success("Customer details updated");
+      setShowEditDialog(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleApproveGst = async () => {
     try {
@@ -97,6 +148,7 @@ export function AdminCustomerDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={openEdit} className="flex items-center gap-1.5 px-3 py-2 border border-border text-xs font-bold rounded-xl"><Pencil className="w-3.5 h-3.5" />Edit Details</button>
           {customer.status !== "ACTIVE" && (
             <button onClick={handleReactivate} className="px-3 py-2 border border-border text-xs font-bold rounded-xl">Reactivate</button>
           )}
@@ -229,6 +281,51 @@ export function AdminCustomerDetailPage() {
           <DialogFooter>
             <button onClick={() => setStatusDialog(null)} className="px-4 py-2 border border-border rounded-xl text-sm font-semibold">Cancel</button>
             <button onClick={handleConfirmStatusChange} disabled={isSaving} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50">{isSaving ? "Saving…" : "Confirm"}</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Customer Details</DialogTitle>
+          </DialogHeader>
+          {editForm && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1">Full Name</label>
+                <input value={editForm.name} onChange={(e) => setEditForm((f) => f && { ...f, name: e.target.value })} className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">Email</label>
+                <input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => f && { ...f, email: e.target.value })} placeholder="customer@example.com" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">Phone</label>
+                <input value={editForm.phone} onChange={(e) => setEditForm((f) => f && { ...f, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="9876543210" inputMode="numeric" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">Account Type</label>
+                <div className="flex gap-2">
+                  {(["RETAIL", "BUSINESS"] as const).map((t) => (
+                    <button key={t} type="button" onClick={() => setEditForm((f) => f && { ...f, accountType: t })} className={`flex-1 py-2 text-xs font-semibold rounded-xl border-2 transition-all ${editForm.accountType === t ? "border-primary bg-primary/5 text-primary" : "border-border"}`}>
+                      {t === "RETAIL" ? "Retail" : "Business"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {editForm.accountType === "BUSINESS" && (
+                <div>
+                  <label className="block text-xs font-semibold mb-1">GSTIN</label>
+                  <input value={editForm.gstin} onChange={(e) => setEditForm((f) => f && { ...f, gstin: e.target.value.toUpperCase() })} placeholder="27AABCC1234M1Z5" maxLength={15} className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm font-mono" />
+                  <p className="text-[11px] text-muted-foreground mt-1">Changing the GSTIN resets approval to Pending — you can re-approve it right after saving.</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 border border-border rounded-xl text-sm font-semibold">Cancel</button>
+            <button onClick={handleSaveEdit} disabled={isSaving} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50">{isSaving ? "Saving…" : "Save Changes"}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

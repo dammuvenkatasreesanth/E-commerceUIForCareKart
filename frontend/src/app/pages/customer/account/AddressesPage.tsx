@@ -114,45 +114,45 @@ export function AddressesPage() {
               <input value={newAddr.name} onChange={e => setNewAddr(a => ({ ...a, name: e.target.value }))} placeholder="Recipient name" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1">PIN Code</label>
-              <div className="relative">
-                <input
-                  value={newAddr.pin}
-                  onChange={e => setNewAddr(a => ({ ...a, pin: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
-                  onBlur={() => setTouched(t => ({ ...t, pin: true }))}
-                  placeholder="400001"
-                  inputMode="numeric"
-                  className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.pin && !pincodeValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
-                />
-                {isLookingUpPincode && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">Looking up…</span>}
-              </div>
-              {touched.pin && !pincodeValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 6-digit pincode</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-semibold mb-1">City</label>
-                <input value={newAddr.city} onChange={e => setNewAddr(a => ({ ...a, city: e.target.value }))} placeholder="Mumbai" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">State</label>
-                <input value={newAddr.state} onChange={e => setNewAddr(a => ({ ...a, state: e.target.value }))} placeholder="Maharashtra" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
-              </div>
-            </div>
-            <div>
               <label className="block text-xs font-semibold mb-1">Address</label>
               <input value={newAddr.line1} onChange={e => setNewAddr(a => ({ ...a, line1: e.target.value }))} placeholder="Flat, Street, Area" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold mb-1">Phone</label>
+                <input
+                  value={newAddr.phone}
+                  onChange={e => setNewAddr(a => ({ ...a, phone: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
+                  onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                  placeholder="9876543210"
+                  inputMode="numeric"
+                  className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.phone && !phoneValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
+                />
+                {touched.phone && !phoneValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 10-digit mobile number</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">PIN Code</label>
+                <div className="relative">
+                  <input
+                    value={newAddr.pin}
+                    onChange={e => setNewAddr(a => ({ ...a, pin: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                    onBlur={() => setTouched(t => ({ ...t, pin: true }))}
+                    placeholder="400001"
+                    inputMode="numeric"
+                    className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.pin && !pincodeValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
+                  />
+                  {isLookingUpPincode && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">Looking up…</span>}
+                </div>
+                {touched.pin && !pincodeValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 6-digit pincode</p>}
+              </div>
+            </div>
             <div>
-              <label className="block text-xs font-semibold mb-1">Phone</label>
-              <input
-                value={newAddr.phone}
-                onChange={e => setNewAddr(a => ({ ...a, phone: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
-                onBlur={() => setTouched(t => ({ ...t, phone: true }))}
-                placeholder="9876543210"
-                inputMode="numeric"
-                className={`w-full px-3 py-2.5 bg-muted rounded-xl border focus:outline-none text-sm ${touched.phone && !phoneValid ? "border-destructive" : "border-transparent focus:border-primary/40"}`}
-              />
-              {touched.phone && !phoneValid && <p className="text-[11px] text-destructive mt-1">Enter a valid 10-digit mobile number</p>}
+              <label className="block text-xs font-semibold mb-1">State</label>
+              <input value={newAddr.state} onChange={e => setNewAddr(a => ({ ...a, state: e.target.value }))} placeholder="Maharashtra" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">City</label>
+              <input value={newAddr.city} onChange={e => setNewAddr(a => ({ ...a, city: e.target.value }))} placeholder="Mumbai" className="w-full px-3 py-2.5 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
             </div>
           </div>
           <div className="flex gap-2 mt-4">

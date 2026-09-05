@@ -18,6 +18,18 @@ export function getCustomer(id: number): Promise<AdminCustomerDetail> {
   return api.get(`/admin/customers/${id}`);
 }
 
+export interface UpdateCustomerInput {
+  name?: string;
+  email?: string;
+  phone?: string;
+  accountType?: AccountType;
+  gstin?: string;
+}
+
+export function updateCustomer(id: number, input: UpdateCustomerInput): Promise<AdminCustomerListItem> {
+  return api.patch(`/admin/customers/${id}`, input);
+}
+
 export function decideGstApproval(id: number, decision: "APPROVED" | "REJECTED", note?: string): Promise<AdminCustomerListItem> {
   return api.patch(`/admin/customers/${id}/gst-approval`, { decision, note });
 }

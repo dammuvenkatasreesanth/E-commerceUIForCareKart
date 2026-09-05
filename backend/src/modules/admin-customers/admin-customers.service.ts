@@ -3,6 +3,7 @@ import { db } from "../../db";
 import { addresses, orders, users, type ACCOUNT_TYPE, type GST_STATUS, type USER_STATUS } from "../../db/schema";
 import { BadRequestError, NotFoundError } from "../../lib/errors";
 import { loadOrderItems } from "../../lib/orderRelations";
+import { updateProfile, type UpdateProfileInput } from "../users/users.service";
 
 type AccountType = (typeof ACCOUNT_TYPE)[number];
 type GstStatus = (typeof GST_STATUS)[number];
@@ -53,19 +54,37 @@ export async function listCustomers(query: ListCustomersQuery) {
   };
 }
 
+// Every editable field except password (name, email, phone, account type,
+// GSTIN) — reuses the customer's own self-service update logic exactly
+// (email-changed-so-reverify, GSTIN-changed-so-back-to-PENDING, etc.) so an
+// admin fixing a typo goes through the same safe transitions a customer
+// would, rather than a separate, easier-to-drift-from copy of that logic.
+export async function updateCustomer(id: number, input: UpdateProfileInput) {
+  const existing = await db.query.users.findFirst({ where: eq(users.id, id) });
+  if (!existing || existing.role !== "CUSTOMER") throw new NotFoundError("Customer not found");
+  return updateProfile(id, input);
+}
+
 export async function getCustomer(id: number) {
   const user = await db.query.users.findFirst({ where: eq(users.id, id) });
   if (!user || user.role !== "CUSTOMER") throw new NotFoundError("Customer not found");
 
-  const [userAddresses, recentOrders] = await Promise.all([
+  const [userAddresses, recentOrders, [{ value: orderCount }]] = await Promise.all([
     db.select().from(addresses).where(eq(addresses.userId, id)),
     db.query.orders.findMany({ where: eq(orders.userId, id), orderBy: [desc(orders.createdAt)], limit: 10 }),
+    db.select({ value: count() }).from(orders).where(eq(orders.userId, id)),
   ]);
   const itemsByOrder = await loadOrderItems(recentOrders.map((o) => o.id));
 
   return {
     ...user,
     addresses: userAddresses,
+    // `orders` below is capped at the 10 most recent (matches listCustomers'
+    // shape, which computes this the same way) — this page previously
+    // crashed for every single customer since the frontend unconditionally
+    // reads customer._count.orders in the Overview section, but this
+    // endpoint never returned a _count field at all.
+    _count: { orders: orderCount },
     orders: recentOrders.map((o) => ({ ...o, items: itemsByOrder.get(o.id) ?? [] })),
   };
 }

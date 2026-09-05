@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { db } from "../../db";
-import { orders, orderStatusHistory, payments, type PAYMENT_TXN_STATUS } from "../../db/schema";
+import { cartItems, orderItems, orders, orderStatusHistory, payments, type PAYMENT_TXN_STATUS } from "../../db/schema";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import * as phonepe from "../../providers/payment/phonepe.provider";
 import { sendOrderConfirmation } from "../checkout/checkout.service";
@@ -64,6 +64,39 @@ async function applyPaymentResult(payment: Payment, result: phonepe.PhonePeCallb
     if (result.success) {
       await tx.update(orders).set({ paymentStatus: "PAID", status: "CONFIRMED", updatedAt: new Date() }).where(eq(orders.id, payment.orderId));
       await tx.insert(orderStatusHistory).values({ orderId: payment.orderId, toStatus: "CONFIRMED", note: "Payment received via PhonePe" });
+
+      // Deliberately deferred to here from order creation (checkout.service.ts)
+      // — clearing the cart only once payment actually succeeds means a
+      // failed or cancelled payment leaves the customer's cart exactly as
+      // they left it, so retrying doesn't mean re-adding everything.
+      //
+      // Removes only the lines that were actually part of THIS order, not
+      // the customer's whole cart: a Buy Now purchase never touched the
+      // cart at all (it would wipe out unrelated items sitting there from
+      // browsing), and even for a real cart checkout, the customer could
+      // have added something new to their cart in the time between placing
+      // this order and finishing payment on PhonePe's page — a blanket
+      // clear would lose that too.
+      const [orderRow] = await tx.select({ userId: orders.userId }).from(orders).where(eq(orders.id, payment.orderId)).limit(1);
+      if (orderRow) {
+        const lines = await tx
+          .select({ productId: orderItems.productId, sizeLabel: orderItems.sizeLabel, tierIndex: orderItems.tierIndex })
+          .from(orderItems)
+          .where(eq(orderItems.orderId, payment.orderId));
+        for (const line of lines) {
+          if (line.productId == null) continue;
+          await tx
+            .delete(cartItems)
+            .where(
+              and(
+                eq(cartItems.userId, orderRow.userId),
+                eq(cartItems.productId, line.productId),
+                eq(cartItems.sizeLabel, line.sizeLabel),
+                eq(cartItems.tierIndex, line.tierIndex),
+              ),
+            );
+        }
+      }
     } else {
       await tx
         .update(orders)

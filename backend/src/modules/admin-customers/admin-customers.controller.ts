@@ -11,6 +11,13 @@ export async function getOne(req: Request, res: Response) {
   res.json(await service.getCustomer(parseIdParam(req.params.id)));
 }
 
+export async function updateCustomer(req: Request, res: Response) {
+  const id = parseIdParam(req.params.id);
+  const user = await service.updateCustomer(id, req.body);
+  await writeAudit({ actorId: req.user!.id, action: "customer.update", entityType: "User", entityId: id, metadata: req.body, ipAddress: req.ip });
+  res.json(user);
+}
+
 export async function gstApproval(req: Request, res: Response) {
   const id = parseIdParam(req.params.id);
   const user = await service.decideGstApproval(id, req.body.decision);
