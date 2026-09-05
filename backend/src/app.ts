@@ -29,12 +29,17 @@ export function createApp() {
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(
     cors({
+      // Declining with `callback(null, false)` — never `callback(err)` — for
+      // an origin outside the allowlist: that just omits the CORS headers,
+      // which is all that's needed to stop a disallowed page's fetch/XHR
+      // from reading the response. Passing an Error instead makes the "cors"
+      // middleware call next(err) and abort the request before it ever
+      // reaches the route handler — which broke Google's OAuth redirect
+      // callback, a legitimate cross-origin POST from accounts.google.com
+      // that's a plain form-style navigation, not a fetch/XHR needing CORS
+      // read permission at all, and has nothing to do with this allowlist.
       origin(requestOrigin, callback) {
-        if (!requestOrigin || allowedOrigins.includes(requestOrigin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error(`Origin ${requestOrigin} not allowed`));
+        callback(null, !requestOrigin || allowedOrigins.includes(requestOrigin));
       },
       credentials: true,
     }),
