@@ -24,6 +24,7 @@ import type { AdminProduct, AdminProductInput, AdminPackTier, AdminBoxSize } fro
 
 type PackTierForm = { tierIndex: number; label: string; packQty: number; discountPct: number; tag: string };
 type BoxSizeForm = { boxCount: number; lengthCm: number; widthCm: number; heightCm: number };
+type SpecRow = { key: string; value: string };
 
 const defaultTiers = (): PackTierForm[] => [
   { tierIndex: 0, label: "Single Unit", packQty: 1, discountPct: 0, tag: "" },
@@ -92,6 +93,7 @@ export function AdminProductsListPage() {
   const [isSavingTiers, setIsSavingTiers] = useState(false);
   const [boxSizeRows, setBoxSizeRows] = useState<BoxSizeForm[]>([]);
   const [isSavingBoxSizes, setIsSavingBoxSizes] = useState(false);
+  const [specRows, setSpecRows] = useState<SpecRow[]>([]);
   const [imageUploadProgress, setImageUploadProgress] = useState<number | null>(null);
   const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
   // `editing` is a snapshot from when the dialog opened — refetch by id so the
@@ -105,6 +107,7 @@ export function AdminProductsListPage() {
     setSizesInput("");
     setTiers(defaultTiers());
     setBoxSizeRows([]);
+    setSpecRows([]);
     setShowForm(true);
   };
 
@@ -131,8 +134,17 @@ export function AdminProductsListPage() {
     setSizesInput(p.sizes.map((s) => s.size).join(", "));
     setTiers(p.packTiers.length > 0 ? tiersFromProduct(p.packTiers) : defaultTiers());
     setBoxSizeRows(boxSizesFromProduct(p.boxSizes));
+    setSpecRows(Object.entries(p.specs ?? {}).map(([key, value]) => ({ key, value })));
     setShowForm(true);
   };
+
+  const updateSpecRow = (index: number, patch: Partial<SpecRow>) => {
+    setSpecRows((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  };
+
+  const addSpecRow = () => setSpecRows((prev) => [...prev, { key: "", value: "" }]);
+
+  const removeSpecRow = (index: number) => setSpecRows((prev) => prev.filter((_, i) => i !== index));
 
   const handleSave = async () => {
     const sizes = sizesInput.split(",").map((s) => s.trim()).filter(Boolean);
@@ -141,7 +153,8 @@ export function AdminProductsListPage() {
       return;
     }
     setIsSaving(true);
-    const input: AdminProductInput = { ...form, sizes, packTiers: editing ? undefined : tiers, boxSizes: editing ? undefined : boxSizeRows };
+    const specs = Object.fromEntries(specRows.filter((s) => s.key.trim()).map((s) => [s.key.trim(), s.value.trim()]));
+    const input: AdminProductInput = { ...form, sizes, specs, packTiers: editing ? undefined : tiers, boxSizes: editing ? undefined : boxSizeRows };
     try {
       if (editing) {
         await updateProduct.mutateAsync({ id: editing.id, input });
@@ -423,6 +436,24 @@ export function AdminProductsListPage() {
               <div className="col-span-2">
                 <label className="block text-xs font-semibold mb-1">Sizes (comma-separated)</label>
                 <input value={sizesInput} onChange={(e) => setSizesInput(e.target.value)} placeholder="S, M, L, XL" className="w-full px-3 py-2 bg-muted rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-sm" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold mb-1">Specifications</label>
+                <p className="text-[11px] text-muted-foreground mb-2">Shown as a table on the product's Specs tab — e.g. Thickness, Length, Color, Standard.</p>
+                <div className="space-y-2">
+                  {specRows.map((s, i) => (
+                    <div key={i} className="grid grid-cols-12 gap-1.5 items-center">
+                      <input value={s.key} onChange={(e) => updateSpecRow(i, { key: e.target.value })} placeholder="Thickness" className="col-span-5 px-2 py-1.5 bg-muted rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-xs" />
+                      <input value={s.value} onChange={(e) => updateSpecRow(i, { value: e.target.value })} placeholder="3.5 mil" className="col-span-6 px-2 py-1.5 bg-muted rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-xs" />
+                      <button onClick={() => removeSpecRow(i)} type="button" className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={addSpecRow} type="button" className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold mt-2">
+                  <Plus className="w-3.5 h-3.5" />Add Spec
+                </button>
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-semibold mb-1">Product Video</label>
