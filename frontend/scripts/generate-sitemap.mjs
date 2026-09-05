@@ -36,12 +36,19 @@ function urlEntry(loc, { changefreq = "weekly", priority = "0.5" } = {}) {
   return `  <url>\n    <loc>${loc}</loc>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`;
 }
 
+// Static informational pages — not catalog-driven, so they don't come from
+// the API like products/categories do. Kept as a plain list here rather than
+// fetched from /content/pages, since that endpoint has no "list all slugs"
+// route and this list changes rarely enough not to need one.
+const STATIC_PAGES = ["about-us", "privacy-policy", "terms-conditions", "shipping-delivery-policy", "cancellation-refund-policy"];
+
 async function main() {
   const [products, categories] = await Promise.all([fetchAllProducts(), fetchCategories()]);
 
   const entries = [
     urlEntry(`${SITE_URL}/`, { changefreq: "daily", priority: "1.0" }),
     urlEntry(`${SITE_URL}/products`, { changefreq: "daily", priority: "0.9" }),
+    ...STATIC_PAGES.map((slug) => urlEntry(`${SITE_URL}/${slug}`, { changefreq: "monthly", priority: "0.6" })),
     ...categories
       .filter((c) => c.isActive)
       .map((c) => urlEntry(`${SITE_URL}/products?category=${c.slug}`, { changefreq: "weekly", priority: "0.7" })),
