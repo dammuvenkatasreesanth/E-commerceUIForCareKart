@@ -5,6 +5,15 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_BASE_PATH: z.string().default("/api/v1"),
+  // Comma-separated — e.g. "https://mycarekart.com,https://www.mycarekart.com".
+  // A single fixed origin here broke every API call (including login) for
+  // anyone reaching the site via a URL variant not in the list: the "cors"
+  // package echoes back exactly this string as Access-Control-Allow-Origin
+  // regardless of the request's actual Origin header, and the browser
+  // rejects the response the moment that doesn't match the page's own
+  // origin — surfacing as a generic "Failed to fetch" with no CORS-specific
+  // detail. www.mycarekart.com fully resolves and serves the site, so it
+  // needs to be an allowed origin too, not just the bare domain.
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),

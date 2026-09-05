@@ -19,8 +19,26 @@ export function createApp() {
     app.set("trust proxy", 1);
   }
 
+  // Supports multiple allowed origins (comma-separated in CORS_ORIGIN) — a
+  // single fixed string here previously broke every API call for anyone
+  // reaching the site via a URL variant not in that one string (e.g.
+  // www.mycarekart.com when only the bare domain was configured), since
+  // "cors" echoes the configured value verbatim and the browser rejects a
+  // mismatch against the page's real origin.
+  const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean);
   app.use(helmet({ crossOriginResourcePolicy: false }));
-  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+  app.use(
+    cors({
+      origin(requestOrigin, callback) {
+        if (!requestOrigin || allowedOrigins.includes(requestOrigin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error(`Origin ${requestOrigin} not allowed`));
+      },
+      credentials: true,
+    }),
+  );
   app.use(cookieParser());
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));

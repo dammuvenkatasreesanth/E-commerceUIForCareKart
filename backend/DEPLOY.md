@@ -16,7 +16,7 @@
    - `PHONEPE_ENV=PROD`
    - `PUBLIC_API_BASE_URL` — the real public URL of this API (e.g. `https://api.carekart.example/api/v1`) — PhonePe redirects and calls back here
    - `FRONTEND_ORDER_CONFIRMATION_URL` — the deployed frontend's confirmation page
-   - `CORS_ORIGIN` — the deployed frontend's origin
+   - `CORS_ORIGIN` — comma-separated list of every origin the frontend is actually reachable at (e.g. `https://mycarekart.com,https://www.mycarekart.com`) — a browser rejects the response the moment the page's own origin isn't in this list, surfacing as a generic "Failed to fetch" on every API call including login; if `www.` resolves to the same site, it needs to be listed explicitly, the bare domain alone isn't enough
    - `NODE_ENV=production`
 
 ## Every deploy
